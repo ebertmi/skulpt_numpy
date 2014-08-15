@@ -296,7 +296,7 @@ var $builtinmodule = function (name) {
       var buffer = ndarrayJs.buffer.map(function (x) {
         return x;
       });
-      var shape = new Sk.builtin.tuplePy(ndarrayJs.shape.map(function (x) {
+      var shape = new Sk.builtin.tuple(ndarrayJs.shape.map(function (x) {
         return new Sk.builtin.int_(x);
       }));
       return Sk.misceval.callsim(mod[CLASS_NDARRAY], shape, ndarrayJs.dtype,

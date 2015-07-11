@@ -19,7 +19,7 @@ var numpy = function () {
 numpy.prototype.wrapasfloats = function (values) {
   var i;
   for (i = 0; i < values.length; i++) {
-    values[i] = new Sk.builtin.nmber(values[i], Sk.builtin.nmber.float$);
+    values[i] = new Sk.builtin.float_(values[i]);
   }
 
   return values;
@@ -45,6 +45,9 @@ var $builtinmodule = function (name) {
   var np = new numpy();
 
   var mod = {};
+
+  // doc string for numpy module
+  mod.__doc__ = new Sk.builtin.str('\nNumPy\n=====\n\nProvides\n  1. An array object of arbitrary homogeneous items\n  2. Fast mathematical operations over arrays\n  3. Linear Algebra, Fourier Transforms, Random Number Generation\n\nHow to use the documentation\n----------------------------\nDocumentation is available in two forms: docstrings provided\nwith the code, and a loose standing reference guide, available from\n`the NumPy homepage <http://www.scipy.org>`_.\n\nWe recommend exploring the docstrings using\n`IPython <http://ipython.scipy.org>`_, an advanced Python shell with\nTAB-completion and introspection capabilities.  See below for further\ninstructions.\n\nThe docstring examples assume that `numpy` has been imported as `np`::\n\n  >>> import numpy as np\n\nCode snippets are indicated by three greater-than signs::\n\n  >>> x = 42\n  >>> x = x + 1\n\nUse the built-in ``help`` function to view a function\'s docstring::\n\n  >>> help(np.sort)\n  ... # doctest: +SKIP\n\nFor some objects, ``np.info(obj)`` may provide additional help.  This is\nparticularly true if you see the line "Help on ufunc object:" at the top\nof the help() page.  Ufuncs are implemented in C, not Python, for speed.\nThe native Python help() does not know how to view their help, but our\nnp.info() function does.\n\nTo search for documents containing a keyword, do::\n\n  >>> np.lookfor(\'keyword\')\n  ... # doctest: +SKIP\n\nGeneral-purpose documents like a glossary and help on the basic concepts\nof numpy are available under the ``doc`` sub-module::\n\n  >>> from numpy import doc\n  >>> help(doc)\n  ... # doctest: +SKIP\n\nAvailable subpackages\n---------------------\ndoc\n    Topical documentation on broadcasting, indexing, etc.\nlib\n    Basic functions used by several sub-packages.\nrandom\n    Core Random Tools\nlinalg\n    Core Linear Algebra Tools\nfft\n    Core FFT routines\npolynomial\n    Polynomial tools\ntesting\n    Numpy testing tools\nf2py\n    Fortran to Python Interface Generator.\ndistutils\n    Enhancements to distutils with support for\n    Fortran compilers support and more.\n\nUtilities\n---------\ntest\n    Run numpy unittests\nshow_config\n    Show numpy build configuration\ndual\n    Overwrite certain functions with high-performance Scipy tools\nmatlib\n    Make everything matrices.\n__version__\n    Numpy version string\n\nViewing documentation using IPython\n-----------------------------------\nStart IPython with the NumPy profile (``ipython -p numpy``), which will\nimport `numpy` under the alias `np`.  Then, use the ``cpaste`` command to\npaste examples into the shell.  To see which functions are available in\n`numpy`, type ``np.<TAB>`` (where ``<TAB>`` refers to the TAB key), or use\n``np.*cos*?<ENTER>`` (where ``<ENTER>`` refers to the ENTER key) to narrow\ndown the list.  To view the docstring for a function, use\n``np.cos?<ENTER>`` (to view the docstring) and ``np.cos??<ENTER>`` (to view\nthe source code).\n\nCopies vs. in-place operation\n-----------------------------\nMost of the functions in `numpy` return a copy of the array argument\n(e.g., `np.sort`).  In-place versions of these functions are often\navailable as array methods, i.e. ``x = np.array([1,2,3]); x.sort()``.\nExceptions to this rule are documented.\n\n');
 
   /**
 		Class for numpy.ndarray
@@ -215,6 +218,7 @@ var $builtinmodule = function (name) {
 
   /**
     Updates all attributes of the numpy.ndarray
+    ToDo: use custom get/set attr that also call the appropriate functions when changed
   **/
   function updateAttributes(self, ndarrayJs) {
     Sk.abstr.sattr(self, 'ndmin', new Sk.builtin.int_(ndarrayJs.shape.length));
@@ -230,6 +234,8 @@ var $builtinmodule = function (name) {
     Sk.abstr.sattr(self, 'size', new Sk.builtin.int_(prod(ndarrayJs.shape)));
     Sk.abstr.sattr(self, 'data', new Sk.ffi.remapToPy(ndarrayJs.buffer));
   }
+
+
 
   /**
     An array object represents a multidimensional, homogeneous array of fixed-size items.
@@ -259,15 +265,73 @@ var $builtinmodule = function (name) {
 
       self.v = ndarrayJs; // value holding the actual js object and array
       self.tp$name = CLASS_NDARRAY; // set class name
-
-      updateAttributes(self, ndarrayJs);
     });
 
-    $loc.tp$getattr = Sk.builtin.object.prototype.GenericGetAttr;
+    /**
+     * Custom getattr impl.
+     */
+    $loc.tp$getattr = function (name) {
+        if (name != null && (Sk.builtin.checkString(name) || typeof name === "string")) {
+            var _name = name;
+
+            // get javascript string
+            if (Sk.builtin.checkString(name)) {
+                _name = Sk.ffi.remapToJs(name);
+            }
+
+            switch(name) {
+              case "ndmin":
+                return new Sk.builtin.int_(this.v.shape.length);
+              case "dtype":
+                return self.v.dtype;
+              case "shape":
+                return new Sk.builtin.tuple(this.v.shape.map(
+                  function (x) {
+                    return new Sk.builtin.int_(x);
+                  }));
+              case "strides":
+                return new Sk.builtin.tuple(this.v.strides.map(
+                  function (x) {
+                    return new Sk.builtin.int_(x);
+                  }));
+              case "size":
+                return new Sk.builtin.int_(prod(this.v.shape));
+              case "data":
+                return new Sk.ffi.remapToPy(this.v.buffer);
+            }
+        }
+
+        // if we have not returned yet, try the genericgetattr
+        return Sk.builtin.object.prototype.GenericGetAttr.call(this, name);
+    };
 
     // ToDo: setAttribute should be implemented, change of shape causes resize
     // ndmin cannot be set, etc...
-    $loc.tp$setattr = Sk.builtin.object.prototype.GenericSetAttr;
+    $loc.tp$setattr = function (name) {
+        if (name != null && (Sk.builtin.checkString(name) || typeof name === "string")) {
+            var _name = name;
+
+            // get javascript string
+            if (Sk.builtin.checkString(name)) {
+                _name = Sk.ffi.remapToJs(name);
+            }
+
+            switch(name) {
+              case "ndmin":
+              case "dtype":
+              case "strides":
+              case "size":
+              case "data":
+                // case fall through
+                throw new Sk.builtin.AttributeError("attribute '" + name + "' of 'numpy.ndarray' objects is not writable");
+              case "shape":
+                throw new Sk.builtin.NotImplementedError("Dynamic ndarray resizing is not implemented.");
+            }
+        }
+
+        // if we have not returned yet, try the genericgetattr
+        return Sk.builtin.object.prototype.GenericSetAttr.call(this, name);
+    };
 
     /*
       Return the array as a (possibly nested) list.
@@ -564,13 +628,13 @@ var $builtinmodule = function (name) {
           _buffer = [];
           for (i = 0, len = lhs.length; i < len; i++) {
             //_buffer[i] = operation(lhs[i], rhs[i]);
-            _buffer[i] = Sk.abstr.binary_op_(lhs[i], rhs[i], operation);
+            _buffer[i] = Sk.abstr.binary_op_(new Sk.builtin.float_(lhs[i]), new Sk.builtin.float_(rhs[i]), operation);
           }
         } else {
           lhs = ndarrayJs.buffer;
           _buffer = [];
           for (i = 0, len = lhs.length; i < len; i++) {
-            _buffer[i] = Sk.abstr.numberBinOp(lhs[i], other, operation);
+            _buffer[i] = Sk.abstr.numberBinOp(new Sk.builtin.float_(lhs[i]), other, operation);
           }
         }
 
@@ -590,7 +654,7 @@ var $builtinmodule = function (name) {
         var rhsBuffer = ndarrayJs.buffer;
         var _buffer = [];
         for (var i = 0, len = rhsBuffer.length; i < len; i++) {
-          _buffer[i] = Sk.abstr.numberBinOp(other, rhsBuffer[i], operation);
+          _buffer[i] = Sk.abstr.numberBinOp(other,  new Sk.builtin.float_(rhsBuffer[i]), operation);
         }
         var shape = new Sk.builtin.tuple(ndarrayJs.shape.map(function (x) {
           return new Sk.builtin.int_(x);
@@ -688,8 +752,7 @@ var $builtinmodule = function (name) {
       var _buffer = ndarrayJs.buffer.map(function (value) {
         num = Sk.builtin.asnum$(value);
         res = op.call(null, num);
-        return new Sk.builtin.nmber(res, Sk.builtin.nmber
-          .float$);
+        return new Sk.builtin.float_(res);
       });
 
       var shape = new Sk.builtin.tuple(ndarrayJs.shape.map(function (x) {
@@ -701,8 +764,7 @@ var $builtinmodule = function (name) {
     } else if (Sk.builtin.checkNumber(x)) {
       num = Sk.builtin.asnum$(x);
       res = op.call(null, num);
-      return new Sk.builtin.nmber(res, Sk.builtin.nmber
-        .float$);
+      return new Sk.builtin.float_(res);
     }
 
     throw new Sk.builtin.TypeError('Unsupported argument type for "x"');
@@ -791,6 +853,29 @@ var $builtinmodule = function (name) {
   tanh_f.co_varnames = ['x', 'out'];
   tanh_f.$defaults = [0, new Sk.builtin.list([])];
   mod.tanh = new Sk.builtin.func(tanh_f);
+
+
+  // Exponential
+  var exp_f = function (x, out) {
+    Sk.builtin.pyCheckArgs("exp", arguments, 1, 2);
+
+    /* for complex type support we should use here a different approach*/
+    //Sk.builtin.assk$(Math.E, Sk.builtin.nmber.float$);
+    return callTrigonometricFunc(x, np.math ? np.math.exp : Math.exp);
+  };
+  exp_f.co_varnames = ['x', 'out'];
+  exp_f.$defaults = [0, new Sk.builtin.list([])];
+  mod.exp = new Sk.builtin.func(exp_f);
+
+  // Square Root
+  var sqrt_f = function (x, out) {
+    Sk.builtin.pyCheckArgs("sqrt", arguments, 1, 2);
+   return callTrigonometricFunc(x, np.math ? np.math.sqrt : Math.sqrt);
+  };
+  sqrt_f.co_varnames = ['x', 'out'];
+  sqrt_f.$defaults = [0, new Sk.builtin.list([])];
+  mod.sqrt = new Sk.builtin.func(sqrt_f);
+
 
   /* Simple reimplementation of the linspace function
    * http://docs.scipy.org/doc/numpy/reference/generated/numpy.linspace.html
@@ -1070,7 +1155,7 @@ var $builtinmodule = function (name) {
     var _shape = Sk.ffi.remapToJs(shape);
     var _tup;
     if(Sk.builtin.checkInt(shape)) {
-      _tup = new Array();
+      _tup = [];
       _tup.push(_shape);
       _shape = _tup;
     }

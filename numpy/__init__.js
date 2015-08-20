@@ -1,25 +1,25 @@
 /**
-	Made by Michael Ebert for https://github.com/skulpt/skulpt
-	ndarray implementation inspired by https://github.com/geometryzen/davinci-dev (not compatible with skulpt)
+  Made by Michael Ebert for https://github.com/skulpt/skulpt
+  ndarray implementation inspired by https://github.com/geometryzen/davinci-dev (not compatible with skulpt)
 
-	Some methods are based on the original numpy implementation.
+  Some methods are based on the original numpy implementation.
 
-	See http://waywaaard.github.io/skulpt/ for more information.
+  See http://waywaaard.github.io/skulpt/ for more information.
 **/
-
+/* eslint-disable */
 var numpy = function () {
   if (typeof mathjs == 'function') {
     // load mathjs instance
     this.math = mathjs();
   } else {
-    Sk.debugout("mathjs not included and callable");
+    Sk.debugout('mathjs not included and callable');
   }
 };
 
 numpy.prototype.wrapasfloats = function (values) {
   var i;
   for (i = 0; i < values.length; i++) {
-    values[i] = new Sk.builtin.float_(values[i]);
+    values[i] = new Sk.builtin.nmber(values[i], Sk.builtin.nmber.float$);
   }
 
   return values;
@@ -50,8 +50,8 @@ var $builtinmodule = function (name) {
   mod.__doc__ = new Sk.builtin.str('\nNumPy\n=====\n\nProvides\n  1. An array object of arbitrary homogeneous items\n  2. Fast mathematical operations over arrays\n  3. Linear Algebra, Fourier Transforms, Random Number Generation\n\nHow to use the documentation\n----------------------------\nDocumentation is available in two forms: docstrings provided\nwith the code, and a loose standing reference guide, available from\n`the NumPy homepage <http://www.scipy.org>`_.\n\nWe recommend exploring the docstrings using\n`IPython <http://ipython.scipy.org>`_, an advanced Python shell with\nTAB-completion and introspection capabilities.  See below for further\ninstructions.\n\nThe docstring examples assume that `numpy` has been imported as `np`::\n\n  >>> import numpy as np\n\nCode snippets are indicated by three greater-than signs::\n\n  >>> x = 42\n  >>> x = x + 1\n\nUse the built-in ``help`` function to view a function\'s docstring::\n\n  >>> help(np.sort)\n  ... # doctest: +SKIP\n\nFor some objects, ``np.info(obj)`` may provide additional help.  This is\nparticularly true if you see the line "Help on ufunc object:" at the top\nof the help() page.  Ufuncs are implemented in C, not Python, for speed.\nThe native Python help() does not know how to view their help, but our\nnp.info() function does.\n\nTo search for documents containing a keyword, do::\n\n  >>> np.lookfor(\'keyword\')\n  ... # doctest: +SKIP\n\nGeneral-purpose documents like a glossary and help on the basic concepts\nof numpy are available under the ``doc`` sub-module::\n\n  >>> from numpy import doc\n  >>> help(doc)\n  ... # doctest: +SKIP\n\nAvailable subpackages\n---------------------\ndoc\n    Topical documentation on broadcasting, indexing, etc.\nlib\n    Basic functions used by several sub-packages.\nrandom\n    Core Random Tools\nlinalg\n    Core Linear Algebra Tools\nfft\n    Core FFT routines\npolynomial\n    Polynomial tools\ntesting\n    Numpy testing tools\nf2py\n    Fortran to Python Interface Generator.\ndistutils\n    Enhancements to distutils with support for\n    Fortran compilers support and more.\n\nUtilities\n---------\ntest\n    Run numpy unittests\nshow_config\n    Show numpy build configuration\ndual\n    Overwrite certain functions with high-performance Scipy tools\nmatlib\n    Make everything matrices.\n__version__\n    Numpy version string\n\nViewing documentation using IPython\n-----------------------------------\nStart IPython with the NumPy profile (``ipython -p numpy``), which will\nimport `numpy` under the alias `np`.  Then, use the ``cpaste`` command to\npaste examples into the shell.  To see which functions are available in\n`numpy`, type ``np.<TAB>`` (where ``<TAB>`` refers to the TAB key), or use\n``np.*cos*?<ENTER>`` (where ``<ENTER>`` refers to the ENTER key) to narrow\ndown the list.  To view the docstring for a function, use\n``np.cos?<ENTER>`` (to view the docstring) and ``np.cos??<ENTER>`` (to view\nthe source code).\n\nCopies vs. in-place operation\n-----------------------------\nMost of the functions in `numpy` return a copy of the array argument\n(e.g., `np.sort`).  In-place versions of these functions are often\navailable as array methods, i.e. ``x = np.array([1,2,3]); x.sort()``.\nExceptions to this rule are documented.\n\n');
 
   /**
-		Class for numpy.ndarray
-	**/
+    Class for numpy.ndarray
+  **/
   var CLASS_NDARRAY = "numpy.ndarray";
 
   function remapToJs_shallow(obj, shallow) {
@@ -74,8 +74,8 @@ var $builtinmodule = function (name) {
   }
 
   /**
-		Unpacks in any form fo nested Lists
-	**/
+    Unpacks in any form fo nested Lists
+  **/
   function unpack(py_obj, buffer, state) {
     if (py_obj instanceof Sk.builtin.list || py_obj instanceof Sk.builtin.tuple) {
       var py_items = remapToJs_shallow(py_obj);
@@ -126,7 +126,7 @@ var $builtinmodule = function (name) {
 
   /**
     Calculates the size of the ndarray, dummy
-	**/
+  **/
   function prod(numbers) {
     var size = 1;
     var i;
@@ -137,9 +137,9 @@ var $builtinmodule = function (name) {
   }
 
   /**
-		Creates a string representation for given buffer and shape
-		buffer is an ndarray
-	**/
+    Creates a string representation for given buffer and shape
+    buffer is an ndarray
+  **/
   function stringify(buffer, shape, dtype) {
     var emits = shape.map(function (x) {
       return 0;
@@ -209,8 +209,8 @@ var $builtinmodule = function (name) {
   }
 
   /**
-	 internal tolist interface
-	**/
+   internal tolist interface
+  **/
   function tolist(buffer, shape, strides, dtype) {
     var buffer_copy = buffer.slice(0);
     return tolistrecursive(buffer_copy, shape, strides, 0, dtype);
@@ -234,8 +234,6 @@ var $builtinmodule = function (name) {
     Sk.abstr.sattr(self, 'size', new Sk.builtin.int_(prod(ndarrayJs.shape)));
     Sk.abstr.sattr(self, 'data', new Sk.ffi.remapToPy(ndarrayJs.buffer));
   }
-
-
 
   /**
     An array object represents a multidimensional, homogeneous array of fixed-size items.
@@ -265,73 +263,15 @@ var $builtinmodule = function (name) {
 
       self.v = ndarrayJs; // value holding the actual js object and array
       self.tp$name = CLASS_NDARRAY; // set class name
+
+      updateAttributes(self, ndarrayJs);
     });
 
-    /**
-     * Custom getattr impl.
-     */
-    $loc.tp$getattr = function (name) {
-        if (name != null && (Sk.builtin.checkString(name) || typeof name === "string")) {
-            var _name = name;
-
-            // get javascript string
-            if (Sk.builtin.checkString(name)) {
-                _name = Sk.ffi.remapToJs(name);
-            }
-
-            switch(name) {
-              case "ndmin":
-                return new Sk.builtin.int_(this.v.shape.length);
-              case "dtype":
-                return self.v.dtype;
-              case "shape":
-                return new Sk.builtin.tuple(this.v.shape.map(
-                  function (x) {
-                    return new Sk.builtin.int_(x);
-                  }));
-              case "strides":
-                return new Sk.builtin.tuple(this.v.strides.map(
-                  function (x) {
-                    return new Sk.builtin.int_(x);
-                  }));
-              case "size":
-                return new Sk.builtin.int_(prod(this.v.shape));
-              case "data":
-                return new Sk.ffi.remapToPy(this.v.buffer);
-            }
-        }
-
-        // if we have not returned yet, try the genericgetattr
-        return Sk.builtin.object.prototype.GenericGetAttr.call(this, name);
-    };
+    $loc.tp$getattr = Sk.builtin.object.prototype.GenericGetAttr;
 
     // ToDo: setAttribute should be implemented, change of shape causes resize
     // ndmin cannot be set, etc...
-    $loc.tp$setattr = function (name) {
-        if (name != null && (Sk.builtin.checkString(name) || typeof name === "string")) {
-            var _name = name;
-
-            // get javascript string
-            if (Sk.builtin.checkString(name)) {
-                _name = Sk.ffi.remapToJs(name);
-            }
-
-            switch(name) {
-              case "ndmin":
-              case "dtype":
-              case "strides":
-              case "size":
-              case "data":
-                // case fall through
-                throw new Sk.builtin.AttributeError("attribute '" + name + "' of 'numpy.ndarray' objects is not writable");
-              case "shape":
-                throw new Sk.builtin.NotImplementedError("Dynamic ndarray resizing is not implemented.");
-            }
-        }
-
-        // if we have not returned yet, try the genericgetattr
-        return Sk.builtin.object.prototype.GenericSetAttr.call(this, name);
-    };
+    $loc.tp$setattr = Sk.builtin.object.prototype.GenericSetAttr;
 
     /*
       Return the array as a (possibly nested) list.
@@ -360,7 +300,7 @@ var $builtinmodule = function (name) {
       var buffer = ndarrayJs.buffer.map(function (x) {
         return x;
       });
-      var shape = new Sk.builtin.tuple(ndarrayJs.shape.map(function (x) {
+      var shape = new Sk.builtin.tuplePy(ndarrayJs.shape.map(function (x) {
         return new Sk.builtin.int_(x);
       }));
       return Sk.misceval.callsim(mod[CLASS_NDARRAY], shape, ndarrayJs.dtype,
@@ -628,13 +568,13 @@ var $builtinmodule = function (name) {
           _buffer = [];
           for (i = 0, len = lhs.length; i < len; i++) {
             //_buffer[i] = operation(lhs[i], rhs[i]);
-            _buffer[i] = Sk.abstr.binary_op_(new Sk.builtin.float_(lhs[i]), new Sk.builtin.float_(rhs[i]), operation);
+            _buffer[i] = Sk.abstr.binary_op_(Sk.ffi.remapToPy(lhs[i]), Sk.ffi.remapToPy(rhs[i]), operation);
           }
         } else {
           lhs = ndarrayJs.buffer;
           _buffer = [];
           for (i = 0, len = lhs.length; i < len; i++) {
-            _buffer[i] = Sk.abstr.numberBinOp(new Sk.builtin.float_(lhs[i]), other, operation);
+            _buffer[i] = Sk.abstr.numberBinOp(Sk.ffi.remapToPy(lhs[i]), other, operation);
           }
         }
 
@@ -650,11 +590,12 @@ var $builtinmodule = function (name) {
 
     function makeNumericBinaryOpRhs(operation) {
       return function (self, other) {
+          debugger;
         var ndarrayJs = Sk.ffi.remapToJs(self);
         var rhsBuffer = ndarrayJs.buffer;
         var _buffer = [];
         for (var i = 0, len = rhsBuffer.length; i < len; i++) {
-          _buffer[i] = Sk.abstr.numberBinOp(other,  new Sk.builtin.float_(rhsBuffer[i]), operation);
+          _buffer[i] = Sk.abstr.numberBinOp(other, Sk.ffi.remapToPy(rhsBuffer[i]), operation);
         }
         var shape = new Sk.builtin.tuple(ndarrayJs.shape.map(function (x) {
           return new Sk.builtin.int_(x);
@@ -752,7 +693,8 @@ var $builtinmodule = function (name) {
       var _buffer = ndarrayJs.buffer.map(function (value) {
         num = Sk.builtin.asnum$(value);
         res = op.call(null, num);
-        return new Sk.builtin.float_(res);
+        return new Sk.builtin.nmber(res, Sk.builtin.nmber
+          .float$);
       });
 
       var shape = new Sk.builtin.tuple(ndarrayJs.shape.map(function (x) {
@@ -764,7 +706,8 @@ var $builtinmodule = function (name) {
     } else if (Sk.builtin.checkNumber(x)) {
       num = Sk.builtin.asnum$(x);
       res = op.call(null, num);
-      return new Sk.builtin.float_(res);
+      return new Sk.builtin.nmber(res, Sk.builtin.nmber
+        .float$);
     }
 
     throw new Sk.builtin.TypeError('Unsupported argument type for "x"');
@@ -1016,31 +959,31 @@ var $builtinmodule = function (name) {
     .func(arange_f);
 
   /* implementation for numpy.array
-	------------------------------------------------------------------------------------------------
-		http://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html#numpy.array
+  ------------------------------------------------------------------------------------------------
+    http://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html#numpy.array
 
-		object : array_like
-		An array, any object exposing the array interface, an object whose __array__ method returns an array, or any (nested) sequence.
+    object : array_like
+    An array, any object exposing the array interface, an object whose __array__ method returns an array, or any (nested) sequence.
 
-		dtype : data-type, optional
-		The desired data-type for the array. If not given, then the type will be determined as the minimum type required to hold the objects in the sequence. This argument can only be used to ‘upcast’ the array. For downcasting, use the .astype(t) method.
+    dtype : data-type, optional
+    The desired data-type for the array. If not given, then the type will be determined as the minimum type required to hold the objects in the sequence. This argument can only be used to ‘upcast’ the array. For downcasting, use the .astype(t) method.
 
-		copy : bool, optional
-		If true (default), then the object is copied. Otherwise, a copy will only be made if __array__ returns a copy, if obj is a nested sequence, or if a copy is needed to satisfy any of the other requirements (dtype, order, etc.).
+    copy : bool, optional
+    If true (default), then the object is copied. Otherwise, a copy will only be made if __array__ returns a copy, if obj is a nested sequence, or if a copy is needed to satisfy any of the other requirements (dtype, order, etc.).
 
-		order : {‘C’, ‘F’, ‘A’}, optional
-		Specify the order of the array. If order is ‘C’ (default), then the array will be in C-contiguous order (last-index varies the fastest). If order is ‘F’, then the returned array will be in Fortran-contiguous order (first-index varies the fastest). If order is ‘A’, then the returned array may be in any order (either C-, Fortran-contiguous, or even discontiguous).
+    order : {‘C’, ‘F’, ‘A’}, optional
+    Specify the order of the array. If order is ‘C’ (default), then the array will be in C-contiguous order (last-index varies the fastest). If order is ‘F’, then the returned array will be in Fortran-contiguous order (first-index varies the fastest). If order is ‘A’, then the returned array may be in any order (either C-, Fortran-contiguous, or even discontiguous).
 
-		subok : bool, optional
-		If True, then sub-classes will be passed-through, otherwise the returned array will be forced to be a base-class array (default).
+    subok : bool, optional
+    If True, then sub-classes will be passed-through, otherwise the returned array will be forced to be a base-class array (default).
 
-		ndmin : int, optional
-		Specifies the minimum number of dimensions that the resulting array should have. Ones will be pre-pended to the shape as needed to meet this requirement.
+    ndmin : int, optional
+    Specifies the minimum number of dimensions that the resulting array should have. Ones will be pre-pended to the shape as needed to meet this requirement.
 
-		Returns :
-		out : ndarray
-		An array object satisfying the specified requirements
-	*/
+    Returns :
+    out : ndarray
+    An array object satisfying the specified requirements
+  */
   // https://github.com/geometryzen/davinci-dev/blob/master/src/stdlib/numpy.js
   // https://github.com/geometryzen/davinci-dev/blob/master/src/ffh.js
   // http://docs.scipy.org/doc/numpy/reference/arrays.html
@@ -1271,18 +1214,18 @@ var $builtinmodule = function (name) {
 
     if (Sk.abstr.typeName(a) === CLASS_NDARRAY) {
       a_matrix = a.v.buffer;
-			a_matrix = a_matrix.map(function (x) {
-				return Sk.ffi.remapToJs(x);
-			});
+      a_matrix = a_matrix.map(function (x) {
+        return Sk.ffi.remapToJs(x);
+      });
     } else {
       a_matrix = Sk.ffi.remapToJs(a);
     }
 
     if (Sk.abstr.typeName(b) === CLASS_NDARRAY) {
       b_matrix = b.v.buffer;
-			b_matrix = b_matrix.map(function (x) {
-				return Sk.ffi.remapToJs(x);
-			});
+      b_matrix = b_matrix.map(function (x) {
+        return Sk.ffi.remapToJs(x);
+      });
     } else {
       b_matrix = Sk.ffi.remapToJs(b);
     }
@@ -1301,9 +1244,9 @@ var $builtinmodule = function (name) {
 
     res = np.math.multiply(a_matrix, b_matrix);
 
-		if (!Array.isArray(res)) { // if result
-			return Sk.ffi.remapToPy(res);
-		}
+    if (!Array.isArray(res)) { // if result
+      return Sk.ffi.remapToPy(res);
+    }
 
     // return ndarray
     buffer = new Sk.builtin.list(res);

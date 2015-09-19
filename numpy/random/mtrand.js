@@ -1,4 +1,103 @@
 /* eslint-disable camelcase, comma-dangle, no-underscore-dangle, strict */
+/**
+ * Base numpy.random module entry,
+ *
+ * requires functions from randomkit.js and initarray.js
+ */
+var rk_state = {
+    key: [],
+    pos: null,
+    has_gauss: null,
+    gauss: null,
+};
+
+// Initialize numpy
+// ToDo: import_array()
+// import numpy
+var CLASS_NDARRAY = "numpy.ndarray"; // maybe make identifier accessible in numpy module
+var np = Sk.importModule('numpy');
+var ndarray_f = np['$d'].array.func_code;
+var operator = Sk.importModule('operator');
+var indexh_f = operator['$d'].indexh.func_code;
+
+function cont0_array(state, func, size, lock) {
+
+}
+
+function cont1_array_sc(state, func, size, a, lock) {
+
+}
+
+function RandomState(seed) {
+    if (seed === undefined) {
+        seed = null; // actually None!
+    }
+
+    this.internal_state = createRkState();
+
+    this.lock = null; // Todo self.lock = Lock()
+    this.seed(seed);
+}
+
+/*
+seed(seed=None)
+Seed the generator.
+This method is called when `RandomState` is initialized. It can be
+called again to re-seed the generator. For details, see `RandomState`.
+Parameters
+----------
+seed : int or array_like, optional
+    Seed for `RandomState`.
+    Must be convertible to 32 bit unsigned integers.
+See Also
+--------
+RandomState
+*/
+RandomState.prototype.seed = function (seed) {
+    if (seed === undefined) {
+        seed = null; // actually None!
+    }
+
+    var errcode; // rk_error
+    var obj; // ndarray
+
+    try{
+        if (seed === null) {
+            // with self.lock
+            errcode = rk_randomseed(this.internal_state);
+        } else {
+            var idx = seed;// ToDo: operator.index(seed)
+
+            if (idx > Math.pow(2, 32) -1 || idx < 0) {
+                throw Error('ValueError', 'Seed must be between 0 and 4294967295');
+            }
+
+            // with self.lock
+            rk_seed(idx, this.internal_state);
+        }
+    } catch(e) {
+        // ToDo: except TypeError
+        // obj = np['$d'].as_array.func_code.callsim(seed);
+        // obj = np.asarray(seed).astype(np.int64, casting='safe')
+        if ((obj > Math.pow(2, 32) - 1) | (obj < 0).any()) {
+            throw Error('ValueError', 'Seed must be between 0 and 4294967295');
+        }
+
+        // obj = obj.astype('L', casting='unsafe')
+        // with self.lock:
+        //    init_by_array(self.internal_state, <unsigned long *>PyArray_DATA(obj),
+        //        PyArray_DIM(obj, 0))
+    }
+
+};
+
+/******************************************************************************/
+/*  RandomKit
+/*
+/******************************************************************************/
+/* eslint-disable camelcase, comma-dangle, no-underscore-dangle, strict */
+
+/* eslint-disable camelcase, comma-dangle, no-underscore-dangle, strict */
 
 var RK_STATE_LEN = 624;
 

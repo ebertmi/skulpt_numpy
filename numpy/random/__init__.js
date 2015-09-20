@@ -10,6 +10,7 @@ function createRkState(key, pos, has_gauss, has_binominal, psave, nsave, r, q, f
     return {
         key: key || [],
         pos: pos || null,
+        gauss: null,
         has_gauss: has_gauss || null, /* !=0 gauss contains a gaussion deviate */
 
         /* The rk_state structure has been extended to store the following
@@ -455,6 +456,9 @@ var $builtinmodule = function(name) {
 
             self.internal_state = createRkState();
 
+            // poisson_lam_max = np.iinfo('l').max - np.sqrt(np.iinfo('l').max)*10
+            self.poisson_lam_max = new Sk.builtin.int_(Math.pow(2, 53) - 1);
+
             self.lock = null; // Todo self.lock = Lock()
             Sk.misceval.callsim(self.seed, self, seed); // self.seed(seed);
         };
@@ -489,30 +493,64 @@ var $builtinmodule = function(name) {
                     errcode = rk_randomseed(self.internal_state);
                 } else {
                     var idx = Sk.misceval.callsim(index_f, seed);// ToDo: operator.index(seed)
+                    var js_idx = Sk.ffi.remapToJs(idx);
 
-                    if (idx > Math.pow(2, 32) -1 || idx < 0) {
+                    if (js_idx > Math.pow(2, 32) - 1 || js_idx < 0) {
                         throw new Sk.builtin.ValueError('Seed must be between 0 and 4294967295');
                     }
 
                     // with self.lock
-                    rk_seed(idx, self.internal_state);
+                    rk_seed(js_idx, self.internal_state);
                 }
             } catch(e) {
                 if (e instanceof Sk.builtin.TypeError) {
                     // ToDo: pass in dtype to asarray
                     obj = Sk.misceval.callsim(np.$d.asarray, seed, Sk.builtin.int_);
-                    if ((obj > Math.pow(2, 32) - 1) | (obj < 0).any()) {
-                        throw new Sk.builtin.ValueError( 'Seed must be between 0 and 4294967295');
-                    }
 
+                    /*
+                    if ((obj > Math.pow(2, 32) - 1) | (obj < 0).any()) {
+                        throw new Sk.builtin.ValueError('Seed must be between 0 and 4294967295');
+                    }
+                    */
+
+                    // check for each item in array
+                    obj.v.buffer.map(function(elem) {
+                        if (elem > Math.pow(2, 32) - 1 || elem < 0) {
+                            throw new Sk.builtin.ValueError('Seed must be between 0 and 4294967295');
+                        }
+                    });
+
+                    // our numpy module does not support astype
                     // obj = obj.astype('L', casting='unsafe')
                     // with self.lock:
-                    //    init_by_array(self.internal_state, <unsigned long *>PyArray_DATA(obj),
-                    //        PyArray_DIM(obj, 0))
+
+                    // init_by_array(self.internal_state, <unsigned long *>PyArray_DATA(obj), PyArray_DIM(obj, 0))
+                    // last parameter is the key_length of first dim!
+                    init_by_array(self.internal_state, obj, obj.v.shape[0]);
                 } else {
                     throw e;
                 }
             }
+        });
+
+        $loc.set_state = new Sk.builtin.func(function(self) {
+
+        });
+
+        $loc.get_state = new Sk.builtin.func(function(self) {
+            // save current state as ndarray
+            // remap internal_state.key to Python objects and then call
+            var js_key = self.internal_state.key.map(function(elem) {
+                return new Sk.builtin.int_(elem);
+            });
+
+            var state = obj = Sk.misceval.callsim(np.$d.asarray, new Sk.builtin.tuple(js_key), Sk.builtin.int_);
+
+            var has_gauss = Sk.ffi.remapToPy(self.internal_state.has_gauss);
+            var gauss  = Sk.ffi.remapToPy(self.internal_state.gauss );
+            var pos  = Sk.ffi.remapToPy(self.internal_state.pos);
+
+            return new Sk.builtin.tuple([new Sk.builtin.str('MT19937'), state, pos, has_gauss, gauss]);
         });
 
         $loc.random_sample = new Sk.builtin.func(function(self) {

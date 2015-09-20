@@ -660,6 +660,10 @@ var $builtinmodule = function(name) {
     // map _rand.rand
     mod.rand = Sk.abstr.gattr(mod._rand, 'rand', true);
     mod.seed = Sk.abstr.gattr(mod._rand, 'seed', true);
+    mod.random_sample = Sk.abstr.gattr(mod._rand, 'random_sample', true);
+    mod.random = mod.random_sample;
+    mod.sample = mod.random_sample;
+
 
     return mod;
 };

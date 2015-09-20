@@ -1001,7 +1001,7 @@ var $builtinmodule = function (name) {
     unpack(object, elements, state);
 
     var i;
-    // apply dtype casting function, if it has been provided
+    // apply dtype casting function, as it has been provided
     if (dtype && Sk.builtin.checkClass(dtype)) {
       for (i = 0; i < elements.length; i++) {
         elements[i] = Sk.misceval.callsim(dtype, elements[i]);

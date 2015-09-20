@@ -1,161 +1,8 @@
-/* eslint-disable camelcase, comma-dangle, no-underscore-dangle, strict */
-/**
- * Base numpy.random module entry,
- *
- * requires functions from randomkit.js and initarray.js
- */
-var rk_state = {
-    key: [],
-    pos: null,
-    has_gauss: null,
-    gauss: null,
-};
-
-// imports
-var CLASS_NDARRAY = "numpy.ndarray"; // maybe make identifier accessible in numpy module
-var np = Sk.importModule('numpy');
-var ndarray_f = np['$d'].array.func_code;
-var operator = Sk.importModule('operator');
-var indexh_f = operator['$d'].indexh.func_code;
-
-/**
- *  Class Name Identifier for RandomState
- */
-var CLASS_RANDOMSTATE = 'RandomState';
-
-function cont0_array(state, func, size, lock) {
-    // not implemented
-}
-
-function cont1_array_sc(state, func, size, a, lock) {
-    // not implemented
-}
-
-var $builtinmodule = function(name) {
-    var mod = {};
-
-    var randomState_c = function($gbl, $loc) {
-        $loc.__init__ = new Sk.builtin.func(function (self, seed) {
-
-        });
-
-        $loc.tp$getattr = Sk.builtin.object.prototype.GenericGetAttr;
-
-        $loc.tp$setattr = Sk.builtin.object.prototype.GenericSetAttr;
-    };
-
-
-    mod[CLASS_RANDOMSTATE] = Sk.misceval.buildClass(mod, randomState_c,
-      CLASS_RANDOMSTATE, []);
-
-
-    // ToDo: create class instance here!
-    mod._rand = {};
-
-    return mod;
-};
-
-function RandomState(seed) {
-    if (seed === undefined) {
-        seed = null; // actually None!
-    }
-
-    this.internal_state = createRkState();
-
-    this.lock = null; // Todo self.lock = Lock()
-    this.seed(seed);
-}
-
-/*
-seed(seed=None)
-Seed the generator.
-This method is called when `RandomState` is initialized. It can be
-called again to re-seed the generator. For details, see `RandomState`.
-Parameters
-----------
-seed : int or array_like, optional
-    Seed for `RandomState`.
-    Must be convertible to 32 bit unsigned integers.
-See Also
---------
-RandomState
-*/
-RandomState.prototype.seed = function (seed) {
-    if (seed === undefined) {
-        seed = null; // actually None!
-    }
-
-    var errcode; // rk_error
-    var obj; // ndarray
-
-    try{
-        if (seed === null) {
-            // with self.lock
-            errcode = rk_randomseed(this.internal_state);
-        } else {
-            var idx = seed;// ToDo: operator.index(seed)
-
-            if (idx > Math.pow(2, 32) -1 || idx < 0) {
-                throw Error('ValueError', 'Seed must be between 0 and 4294967295');
-            }
-
-            // with self.lock
-            rk_seed(idx, this.internal_state);
-        }
-    } catch(e) {
-        // ToDo: except TypeError
-        // obj = np['$d'].as_array.func_code.callsim(seed);
-        // obj = np.asarray(seed).astype(np.int64, casting='safe')
-        if ((obj > Math.pow(2, 32) - 1) | (obj < 0).any()) {
-            throw Error('ValueError', 'Seed must be between 0 and 4294967295');
-        }
-
-        // obj = obj.astype('L', casting='unsafe')
-        // with self.lock:
-        //    init_by_array(self.internal_state, <unsigned long *>PyArray_DATA(obj),
-        //        PyArray_DIM(obj, 0))
-    }
-
-};
-
-RandomState.prototype.get_state = function() {
-
-};
-
-RandomState.prototype.set_state = function() {
-
-};
-
-RandomState.prototype.random_sample = function() {
-
-};
-
-RandomState.prototype.randint = function() {
-
-};
-
-RandomState.prototype.bytes = function() {
-
-};
-
-RandomState.prototype.choice = function() {
-
-};
-
-RandomState.prototype.uniform = function() {
-
-};
-
-RandomState.prototype.rand = function(args) {
-};
-
-/******************************************************************************/
-/*  RandomKit
-/*
-/******************************************************************************/
-/* eslint-disable camelcase, comma-dangle, no-underscore-dangle, strict */
-
-/* eslint-disable camelcase, comma-dangle, no-underscore-dangle, strict */
+/* eslint-disable camelcase, no-eq-null, comma-dangle, no-underscore-dangle, strict, new-cap, no-var, vars-on-top, no-param-reassign, func-names */
+/* ****************************************************************************/
+/*                                  RandomKit                                 */
+/*                                                                            */
+/* ****************************************************************************/
 
 var RK_STATE_LEN = 624;
 
@@ -273,7 +120,7 @@ function rk_randomseed(state) {
     var i;
     var tv;
 
-    if (rk_devfill(state.key, null, 0) == rk_error.RK_NOERR) {
+    if (rk_devfill(state.key, 4, 0) == rk_error.RK_NOERR) {
         /* ensures non-zero key */
         state.key[0] |= 0x80000000;
         state.pos = RK_STATE_LEN;
@@ -319,7 +166,7 @@ function rk_random(state) {
     if (state.pos === RK_STATE_LEN) {
         var i;
 
-        for(i = 0; i < N - M; i++) {
+        for (i = 0; i < N - M; i++) {
             y = (state.key[i] & UPPER_MASK) | (state.key[i + 1] & LOWER_MASK);
             state.key[i] = state.key[i + M] ^ (y >> 1) ^ (-(y & 1) & MATRIX_A);
         }
@@ -346,17 +193,17 @@ function rk_random(state) {
 }
 
 /*
- * Returns a random long between 0 and LONG_MAX inclusive
- */
-function rk_long(state) {
-    return rk_ulong(state) >> 1;
-}
-
-/*
  * Returns a random unsigned long between 0 and ULONG_MAX inclusive
  */
 function rk_ulong(state) {
     return (rk_random(state) << 32) | (rk_random(state));
+}
+
+/*
+ * Returns a random long between 0 and LONG_MAX inclusive
+ */
+function rk_long(state) {
+    return rk_ulong(state) >> 1;
 }
 
 /*
@@ -382,8 +229,7 @@ function rk_interval(max, state) {
         while ((value = (rk_random(state) & mask)) > max) {
             // empty block
         }
-    }
-    else {
+    } else {
         while ((value = (rk_ulong(state) & mask)) > max) {
             // empty block
         }
@@ -397,7 +243,8 @@ function rk_interval(max, state) {
  */
 function rk_double(state) {
     /* shifts : 67108864 = 0x4000000, 9007199254740992 = 0x20000000000000 */
-    var a = rk_random(state) >> 5, b = rk_random(state) >> 6;
+    var a = rk_random(state) >> 5;
+    var b = rk_random(state) >> 6;
     return (a * 67108864.0 + b) / 9007199254740992.0;
 }
 
@@ -485,11 +332,11 @@ function rk_gauss(state) {
     }
 }
 
-/********************************************************************/
+/* ******************************************************************/
 /*                                                                  */
 /*                          iniarray.c                              */
 /*                                                                  */
-/********************************************************************/
+/* ******************************************************************/
 /* initializes mt[RK_STATE_LEN] with a seed */
 function init_genrand(self, s) {
     var mti;
@@ -558,3 +405,143 @@ function init_by_array(self, init_key, key_length) {
     self.has_gauss = 0;
     self.has_binomial = 0;
 }
+
+/* eslint-disable camelcase, comma-dangle, no-underscore-dangle, strict */
+/* ****************************************************************************/
+/* Base numpy.random module entry,                                            */
+/*                                                                            */
+/* requires functions from randomkit.js and initarray.js                      */
+/* ****************************************************************************/
+
+var rk_state = {
+    key: [],
+    pos: null,
+    has_gauss: null,
+    gauss: null,
+};
+
+// imports
+var CLASS_NDARRAY = "numpy.ndarray"; // maybe make identifier accessible in numpy module
+var np = Sk.importModule('numpy');
+var ndarray_f = np.$d.array.func_code;
+var operator = Sk.importModule('operator');
+var index_f = operator.$d.index.func_code;
+
+/**
+ *  Class Name Identifier for RandomState
+ */
+var CLASS_RANDOMSTATE = 'RandomState';
+
+function cont0_array(state, func, size, lock) {
+    // not implemented
+}
+
+function cont1_array_sc(state, func, size, a, lock) {
+    // not implemented
+}
+
+/**
+ *  This is the actual module nump.random
+ */
+var $builtinmodule = function(name) {
+    var mod = {};
+
+    var randomState_c = function($gbl, $loc) {
+        var init_f = function(self, seed) {
+            debugger;
+            if (seed == null) {
+                seed = Sk.builtin.none.none$;
+            }
+
+            self.internal_state = createRkState();
+
+            self.lock = null; // Todo self.lock = Lock()
+            Sk.misceval.callsim(self.seed, self, seed); // self.seed(seed);
+        };
+        init_f.co_varnames = ['self', 'seed'];
+        init_f.$defaults = [Sk.builtin.none.none$];
+        $loc.__init__ = new Sk.builtin.func(init_f);
+        /*
+            seed(seed=None)
+            Seed the generator.
+            This method is called when `RandomState` is initialized. It can be
+            called again to re-seed the generator. For details, see `RandomState`.
+            Parameters
+            ----------
+            seed : int or array_like, optional
+                Seed for `RandomState`.
+                Must be convertible to 32 bit unsigned integers.
+            See Also
+            --------
+            RandomState
+        */
+        $loc.seed = new Sk.builtin.func(function (self, seed) {
+            if (seed == null) {
+                seed = Sk.builtin.none.none$;
+            }
+
+            var errcode; // rk_error
+            var obj; // ndarray
+
+            try {
+                if (Sk.builtin.checkNone(seed)) {
+                    // with self.lock
+                    errcode = rk_randomseed(self.internal_state);
+                } else {
+                    var idx = Sk.misceval.callsim(index_f, seed);// ToDo: operator.index(seed)
+
+                    if (idx > Math.pow(2, 32) -1 || idx < 0) {
+                        throw new Sk.builtin.ValueError('Seed must be between 0 and 4294967295');
+                    }
+
+                    // with self.lock
+                    rk_seed(idx, self.internal_state);
+                }
+            } catch(e) {
+                if (e instanceof Sk.builtin.TypeError) {
+                    // ToDo: pass in dtype to asarray
+                    obj = Sk.misceval.callsim(np.$d.asarray, seed, Sk.builtin.int_);
+                    if ((obj > Math.pow(2, 32) - 1) | (obj < 0).any()) {
+                        throw new Sk.builtin.ValueError( 'Seed must be between 0 and 4294967295');
+                    }
+
+                    // obj = obj.astype('L', casting='unsafe')
+                    // with self.lock:
+                    //    init_by_array(self.internal_state, <unsigned long *>PyArray_DATA(obj),
+                    //        PyArray_DIM(obj, 0))
+                } else {
+                    throw e;
+                }
+            }
+        });
+
+        $loc.random_sample = new Sk.builtin.func(function(self) {
+            // get *args
+        });
+
+        $loc.rand = new Sk.builtin.func(function (self) {
+            // get *args
+            args = new Sk.builtins.tuple(Array.prototype.slice.call(arguments, 1));
+
+            return new Sk.builtin.float_(3);
+        });
+
+        $loc.tp$getattr = Sk.builtin.object.prototype.GenericGetAttr;
+
+        $loc.tp$setattr = Sk.builtin.object.prototype.GenericSetAttr;
+    };
+
+
+    mod[CLASS_RANDOMSTATE] = Sk.misceval.buildClass(mod, randomState_c,
+      CLASS_RANDOMSTATE, []);
+
+
+    // _rand is just an instance of the RandomState class!
+    mod._rand = Sk.misceval.callsim(mod[CLASS_RANDOMSTATE]);
+
+    // map _rand.rand
+    mod.rand = mod._rand.rand;
+    mod.seed = mod._rand.seed;
+
+    return mod;
+};

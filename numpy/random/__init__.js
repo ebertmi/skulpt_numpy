@@ -8,7 +8,7 @@ var RK_STATE_LEN = 624;
 
 function createRkState(key, pos, has_gauss, has_binominal, psave, nsave, r, q, fm, m, p1, xm, xl, xr, laml, lamr, p2, p3, p4) {
     return {
-        key: key || [],
+        key: key || new Array(RK_STATE_LEN),
         pos: pos || null,
         gauss: null,
         has_gauss: has_gauss || null, /* !=0 gauss contains a gaussion deviate */
@@ -38,35 +38,6 @@ function createRkState(key, pos, has_gauss, has_binominal, psave, nsave, r, q, f
     };
 }
 
-var rk_state_ = {
-    key: [],
-    pos: null,
-    has_gauss: null, /* !=0 gauss contains a gaussion deviate */
-
-    /* The rk_state structure has been extended to store the following
-     * information for the binomial generator. If the input values of n or p
-     * are different than nsave and psave, then the other parameters will be
-     * recomputed. RTK 2005-09-02 */
-
-    has_binominal: null, /* !=0 following parameters initialized for binomial */
-
-    psave: null,
-    nsave: null,
-    r: null,
-    q: null,
-    fm: null,
-    m: null,
-    p1: null,
-    xm: null,
-    xl: null,
-    xr: null,
-    laml: null,
-    lamr: null,
-    p2: null,
-    p3: null,
-    p4: null,
-};
-
 var rk_error = {
     RK_NOERR: 'RK_NOERR', /* no error */
     RK_ENODEV: 'RK_ENODEV', /* no RK_DEV_RANDOM device */
@@ -80,15 +51,23 @@ var rk_strerror = [
 
 var RK_MAX = 0xFFFFFFFF;
 
+var rk_hash_uint;
+if (typeof Uint32Array === undefined) {
+    rk_hash_uint = [0];
+} else {
+    rk_hash_uint = new Uint32Array(1);
+}
+
 /* Thomas Wang 32 bits integer hash function */
 function rk_hash(key) {
-    key += ~(key << 15);
-    key ^= (key >> 10);
-    key += (key << 3);
-    key ^= (key >> 6);
-    key += ~(key << 11);
-    key ^= (key >> 16);
-    return key;
+    rk_hash_uint[0] = key | 0;
+    rk_hash_uint[0] += ~(rk_hash_uint[0] << 15);
+    rk_hash_uint[0] ^= (rk_hash_uint[0] >>> 10);
+    rk_hash_uint[0] += (rk_hash_uint[0] << 3);
+    rk_hash_uint[0] ^= (rk_hash_uint[0] >>> 6);
+    rk_hash_uint[0] += ~(rk_hash_uint[0] << 11);
+    rk_hash_uint[0] ^= (rk_hash_uint[0] >>> 16);
+    return rk_hash_uint[0] >>> 0;
 }
 
 /*
@@ -101,7 +80,7 @@ function rk_seed(seed, state) {
     /* Knuth's PRNG as used in the Mersenne Twister reference implementation */
     for (pos = 0; pos < RK_STATE_LEN; pos++) {
         state.key[pos] = seed;
-        seed = (1812433253 * (seed ^ (seed >> 30)) + pos + 1) & 0xffffffff;
+        seed = (1812433253 * (seed ^ (seed >>> 30)) + pos + 1) & 0xffffffff;
     }
     state.pos = RK_STATE_LEN;
     state.gauss = 0;
@@ -121,7 +100,7 @@ function rk_randomseed(state) {
     var i;
     var tv;
 
-    if (rk_devfill(state.key, 4, 0) == rk_error.RK_NOERR) {
+    if (rk_devfill(state.key, 4, 0) === rk_error.RK_NOERR) {
         /* ensures non-zero key */
         state.key[0] |= 0x80000000;
         state.pos = RK_STATE_LEN;
@@ -137,15 +116,8 @@ function rk_randomseed(state) {
 
     tv = new Date();
 
-    // We cannot access the clock in javascript
-    // We try to use the high performance timer, that is only supported in modern
-    // browser versions -> No IE9 support
-    if (window.performance && typeof window.performance.now === 'function') {
-        var clock_stub = window.performance.now();
-        rk_seed(rk_hash(tv.getTime()) ^ rk_hash(tv.getMilliseconds()) ^ rk_hash(clock_stub), state);
-    } else {
-        rk_seed(rk_hash(tv.getTime()) ^ rk_hash(tv.getMilliseconds()), state);
-    }
+    // we do not have access to the cpu clock!
+    rk_seed(rk_hash(tv.getTime()) ^ rk_hash(tv.getMilliseconds()), state);
 
     return rk_error.RK_ENODEV;
 }
@@ -169,15 +141,15 @@ function rk_random(state) {
 
         for (i = 0; i < N - M; i++) {
             y = (state.key[i] & UPPER_MASK) | (state.key[i + 1] & LOWER_MASK);
-            state.key[i] = state.key[i + M] ^ (y >> 1) ^ (-(y & 1) & MATRIX_A);
+            state.key[i] = state.key[i + M] ^ (y >>> 1) ^ (-(y & 1) & MATRIX_A);
         }
 
         for (; i < N - 1; i++) {
             y = (state.key[i] & UPPER_MASK) | (state.key[i + 1] & LOWER_MASK);
-            state.key[i] = state.key[i + (M - N)] ^ (y >> 1) ^ (-(y & 1) & MATRIX_A);
+            state.key[i] = state.key[i + (M - N)] ^ (y >>> 1) ^ (-(y & 1) & MATRIX_A);
         }
         y = (state.key[N - 1] & UPPER_MASK) | (state.key[0] & LOWER_MASK);
-        state.key[N - 1] = state.key[M - 1] ^ (y >> 1) ^ (-(y & 1) & MATRIX_A);
+        state.key[N - 1] = state.key[M - 1] ^ (y >>> 1) ^ (-(y & 1) & MATRIX_A);
 
         state.pos = 0;
     }
@@ -185,26 +157,27 @@ function rk_random(state) {
     y = state.key[state.pos++];
 
     /* Tempering */
-    y ^= (y >> 11);
+    y ^= (y >>> 11);
     y ^= (y << 7) & 0x9d2c5680;
     y ^= (y << 15) & 0xefc60000;
-    y ^= (y >> 18);
+    y ^= (y >>> 18);
 
-    return y;
+    // some javascript specifics
+    return y >>> 0;
 }
 
 /*
  * Returns a random unsigned long between 0 and ULONG_MAX inclusive
  */
 function rk_ulong(state) {
-    return (rk_random(state) << 32) | (rk_random(state));
+    return rk_random(state);
 }
 
 /*
  * Returns a random long between 0 and LONG_MAX inclusive
  */
 function rk_long(state) {
-    return rk_ulong(state) >> 1;
+    return rk_ulong(state) >>> 1;
 }
 
 /*
@@ -219,12 +192,12 @@ function rk_interval(max, state) {
     }
 
     /* Smallest bit mask >= mask */
-    mask |= mask >> 1;
-    mask |= mask >> 2;
-    mask |= mask >> 4;
-    mask |= mask >> 8;
-    mask |= mask >> 16;
-    mask |= mask >> 32;
+    mask |= mask >>> 1;
+    mask |= mask >>> 2;
+    mask |= mask >>> 4;
+    mask |= mask >>> 8;
+    mask |= mask >>> 16;
+    // mask |= mask >>> 32;
 
     if (max <= 0xffffffff) {
         while ((value = (rk_random(state) & mask)) > max) {
@@ -244,8 +217,8 @@ function rk_interval(max, state) {
  */
 function rk_double(state) {
     /* shifts : 67108864 = 0x4000000, 9007199254740992 = 0x20000000000000 */
-    var a = rk_random(state) >> 5;
-    var b = rk_random(state) >> 6;
+    var a = rk_random(state) >>> 5;
+    var b = rk_random(state) >>> 6;
     return (a * 67108864.0 + b) / 9007199254740992.0;
 }
 
@@ -262,9 +235,9 @@ function rk_fill(buffer, size, state) {
     for (; size >= 4; size -= 4) {
         r = rk_random(state);
         buf[i++] = r & 0xFF;
-        buf[i++] = (r >> 8) & 0xFF;
-        buf[i++] = (r >> 16) & 0xFF;
-        buf[i++] = (r >> 24) & 0xFF;
+        buf[i++] = (r >>> 8) & 0xFF;
+        buf[i++] = (r >>> 16) & 0xFF;
+        buf[i++] = (r >>> 24) & 0xFF;
     }
 
     if (!size) {
@@ -272,7 +245,7 @@ function rk_fill(buffer, size, state) {
     }
 
     r = rk_random(state);
-    for (; size; r >>= 8, size--) {
+    for (; size; r >>>= 8, size--) {
         buf[i++] = r & 0xFF;
     }
 }
@@ -351,7 +324,7 @@ function init_genrand(self, s) {
          * only MSBs of the array mt[].
          * 2002/01/09 modified by Makoto Matsumoto
          */
-        mt[mti] = (1812433253 * (mt[mti - 1] ^ (mt[mti - 1] >> 30)) + mti);
+        mt[mti] = (1812433253 * (mt[mti - 1] ^ (mt[mti - 1] >>> 30)) + mti);
         /* for > 32 bit machines */
         mt[mti] &= 0xffffffff;
     }
@@ -376,7 +349,7 @@ function init_by_array(self, init_key, key_length) {
     k = (RK_STATE_LEN > key_length ? RK_STATE_LEN : key_length);
     for (; k; k--) {
         /* non linear */
-        mt[i] = (mt[i] ^ ((mt[i - 1] ^ (mt[i - 1] >> 30)) * 1664525))
+        mt[i] = (mt[i] ^ ((mt[i - 1] ^ (mt[i - 1] >>> 30)) * 1664525))
             + init_key[j] + j;
         /* for > 32 bit machines */
         mt[i] &= 0xffffffff;
@@ -391,7 +364,7 @@ function init_by_array(self, init_key, key_length) {
         }
     }
     for (k = RK_STATE_LEN - 1; k; k--) {
-        mt[i] = (mt[i] ^ ((mt[i - 1] ^ (mt[i - 1] >> 30)) * 1566083941))
+        mt[i] = (mt[i] ^ ((mt[i - 1] ^ (mt[i - 1] >>> 30)) * 1566083941))
              - i; /* non linear */
         mt[i] &= 0xffffffff; /* for WORDSIZE > 32 machines */
         i++;
@@ -422,11 +395,7 @@ var rk_state = {
 };
 
 // imports
-var CLASS_NDARRAY = "numpy.ndarray"; // maybe make identifier accessible in numpy module
 var np = Sk.importModule('numpy');
-var ndarray_f = np.$d.array.func_code;
-var operator = Sk.importModule('operator');
-var index_f = operator.$d.index.func_code;
 
 /**
  *  Class Name Identifier for RandomState
@@ -435,6 +404,26 @@ var CLASS_RANDOMSTATE = 'RandomState';
 
 function cont0_array(state, func, size, lock) {
     // not implemented
+    var array_data;
+    var array;
+    var length;
+    var i;
+
+    // we just return a single value!
+    if (Sk.builtin.checkNone(size)) {
+        return new Sk.builtin.float_(func.call(null, state));
+    }
+
+    array = Sk.misceval.callsim(np.$d.empty, size, Sk.builtin.float_);
+    length = array.v.buffer.length;
+
+    array_data = array.v.buffer; // data view on the ndarray
+
+    for (i = 0; i < length; i++) {
+        array_data[i] = func.call(null, state);
+    }
+
+    return array;
 }
 
 function cont1_array_sc(state, func, size, a, lock) {
@@ -448,7 +437,7 @@ var $builtinmodule = function(name) {
     var mod = {};
 
     var randomState_c = function($gbl, $loc) {
-        var init_f = function(self, seed) {
+        var js__init__ = function(self, seed) {
             debugger;
             if (seed == null) {
                 seed = Sk.builtin.none.none$;
@@ -462,9 +451,9 @@ var $builtinmodule = function(name) {
             self.lock = null; // Todo self.lock = Lock()
             Sk.misceval.callsim(self.seed, self, seed); // self.seed(seed);
         };
-        init_f.co_varnames = ['self', 'seed'];
-        init_f.$defaults = [Sk.builtin.none.none$];
-        $loc.__init__ = new Sk.builtin.func(init_f);
+        js__init__.co_varnames = ['self', 'seed'];
+        js__init__.$defaults = [Sk.builtin.none.none$];
+        $loc.__init__ = new Sk.builtin.func(js__init__);
         /*
             seed(seed=None)
             Seed the generator.
@@ -479,7 +468,7 @@ var $builtinmodule = function(name) {
             --------
             RandomState
         */
-        $loc.seed = new Sk.builtin.func(function (self, seed) {
+        $loc.seed = new Sk.builtin.func(function(self, seed) {
             if (seed == null) {
                 seed = Sk.builtin.none.none$;
             }
@@ -492,7 +481,7 @@ var $builtinmodule = function(name) {
                     // with self.lock
                     errcode = rk_randomseed(self.internal_state);
                 } else {
-                    var idx = Sk.misceval.callsim(index_f, seed);// ToDo: operator.index(seed)
+                    var idx = new Sk.builtin.int_(Sk.misceval.asIndex(seed)); // ToDo: operator.index(seed)
                     var js_idx = Sk.ffi.remapToJs(idx);
 
                     if (js_idx > Math.pow(2, 32) - 1 || js_idx < 0) {
@@ -526,7 +515,7 @@ var $builtinmodule = function(name) {
 
                     // init_by_array(self.internal_state, <unsigned long *>PyArray_DATA(obj), PyArray_DIM(obj, 0))
                     // last parameter is the key_length of first dim!
-                    init_by_array(self.internal_state, obj, obj.v.shape[0]);
+                    init_by_array(self.internal_state, obj.v.buffer, obj.v.shape[0]);
                 } else {
                     throw e;
                 }
@@ -546,22 +535,113 @@ var $builtinmodule = function(name) {
 
             var state = obj = Sk.misceval.callsim(np.$d.asarray, new Sk.builtin.tuple(js_key), Sk.builtin.int_);
 
-            var has_gauss = Sk.ffi.remapToPy(self.internal_state.has_gauss);
-            var gauss  = Sk.ffi.remapToPy(self.internal_state.gauss );
-            var pos  = Sk.ffi.remapToPy(self.internal_state.pos);
+            var has_gauss = new Sk.builtin.int_(self.internal_state.has_gauss);
+            var gauss  = new Sk.builtin.float_(self.internal_state.gauss );
+            var pos  = new Sk.builtin.int_(self.internal_state.pos);
 
             return new Sk.builtin.tuple([new Sk.builtin.str('MT19937'), state, pos, has_gauss, gauss]);
         });
 
-        $loc.random_sample = new Sk.builtin.func(function(self) {
+        /*
+        random_sample(size=None)
+        Return random floats in the half-open interval [0.0, 1.0).
+        Results are from the "continuous uniform" distribution over the
+        stated interval.  To sample :math:`Unif[a, b), b > a` multiply
+        the output of `random_sample` by `(b-a)` and add `a`::
+          (b - a) * random_sample() + a
+        Parameters
+        ----------
+        size : int or tuple of ints, optional
+            Output shape.  If the given shape is, e.g., ``(m, n, k)``, then
+            ``m * n * k`` samples are drawn.  Default is None, in which case a
+            single value is returned.
+        Returns
+        -------
+        out : float or ndarray of floats
+            Array of random floats of shape `size` (unless ``size=None``, in which
+            case a single float is returned).
+        Examples
+        --------
+        >>> np.random.random_sample()
+        0.47108547995356098
+        >>> type(np.random.random_sample())
+        <type 'float'>
+        >>> np.random.random_sample((5,))
+        array([ 0.30220482,  0.86820401,  0.1654503 ,  0.11659149,  0.54323428])
+        Three-by-two array of random numbers from [-5, 0):
+        >>> 5 * np.random.random_sample((3, 2)) - 5
+        array([[-3.99149989, -0.52338984],
+               [-2.99091858, -0.79479508],
+               [-1.23204345, -1.75224494]])
+        */
+        var js_random_sample = function(self, size) {
             // get *args
-        });
+            if (size == null) {
+                size = Sk.builtin.none.none$;
+            }
 
-        $loc.rand = new Sk.builtin.func(function (self) {
+            var py_res = cont0_array(self.internal_state, rk_double, size, self.lock);
+
+            return py_res;
+        };
+        js_random_sample.co_varnames = ['self', 'size'];
+        js_random_sample.$defaults = [Sk.builtin.none.none$];
+        $loc.random_sample = new Sk.builtin.func(js_random_sample);
+
+        var js_tomaxint = function(self, size) {
+            throw new NotImplementedError('RandomState.tomaxint');
+            // return disc0_array(self.internal_state, rk_long, size, self.lock)
+        };
+        js_tomaxint.co_varnames = ['self', 'size'];
+        js_tomaxint.$defaults = [Sk.builtin.none.none$];
+        $loc.tomaxint = new Sk.builtin.func(js_tomaxint);
+
+        /*
+        randint(low, high=None, size=None)
+        Return random integers from `low` (inclusive) to `high` (exclusive).
+        Return random integers from the "discrete uniform" distribution in the
+        "half-open" interval [`low`, `high`). If `high` is None (the default),
+        then results are from [0, `low`).
+        */
+        var js_randint = function(self, low, high, size) {
+            throw new NotImplementedError('RandomState.randint');
+        };
+        js_randint.co_varnames = ['self', 'low', 'high', 'size'];
+        js_randint.$defaults = [null, Sk.builtin.none.none$, Sk.builtin.none.none$];
+        $loc.randint = new Sk.builtin.func(js_randint);
+
+        $loc.rand = new Sk.builtin.func(function(self) {
             // get *args
             args = new Sk.builtins.tuple(Array.prototype.slice.call(arguments, 1));
+            if (args.v.length === 0) {
+                return Sk.misceval.callsim(self.random_sample, self);
+            }
 
-            return new Sk.builtin.float_(3);
+            return Sk.misceval.callsim(self.random_sample, self, args);
+        });
+
+        var js_bytes = function(self, length) {
+            throw new NotImplementedError('RandomState.bytes');
+        };
+        $loc.bytes = new Sk.builtin.func(js_bytes);
+
+        var js_choice = function(self, length) {
+            throw new NotImplementedError('RandomState.choice');
+        };
+        $loc.choice = new Sk.builtin.func(js_choice);
+
+        var js_uniform = function(self, length) {
+            throw new NotImplementedError('RandomState.uniform');
+        };
+        $loc.uniform = new Sk.builtin.func(js_uniform);
+
+        $loc.randn = new Sk.builtin.func(function(self) {
+            args = new Sk.builtins.tuple(Array.prototype.slice.call(arguments, 1));
+            if (args.v.length === 0) {
+                return Sk.misceval.callsim(self.standard_normal, self);
+            }
+
+            return Sk.misceval.callsim(self.standard_normal, self, args);
         });
 
         $loc.tp$getattr = Sk.builtin.object.prototype.GenericGetAttr;
@@ -578,8 +658,8 @@ var $builtinmodule = function(name) {
     mod._rand = Sk.misceval.callsim(mod[CLASS_RANDOMSTATE]);
 
     // map _rand.rand
-    mod.rand = mod._rand.rand;
-    mod.seed = mod._rand.seed;
+    mod.rand = Sk.abstr.gattr(mod._rand, 'rand', true);
+    mod.seed = Sk.abstr.gattr(mod._rand, 'seed', true);
 
     return mod;
 };

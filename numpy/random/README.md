@@ -1,4 +1,4 @@
-README.md
+https://github.com/numpy/numpy/blob/master/numpy/random/__init__.py
 # Implementation of the numpy.random module (basic functionality)
 ## RandomState
 The ```RandomState``` class is working and can be already used to generate a new instance with a given seed.

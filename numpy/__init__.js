@@ -1,47 +1,448 @@
-/**
-  Made by Michael Ebert for https://github.com/skulpt/skulpt
-  ndarray implementation inspired by https://github.com/geometryzen/davinci-dev (not compatible with skulpt)
-
-  Some methods are based on the original numpy implementation.
-
-  See http://waywaaard.github.io/skulpt/ for more information.
-**/
-/* eslint-disable */
-var numpy = function () {
-  if (typeof mathjs == 'function') {
-    // load mathjs instance
-    this.math = mathjs();
-  } else {
-    Sk.debugout('mathjs not included and callable');
-  }
-};
-
-numpy.prototype.wrapasfloats = function (values) {
-  var i;
-  for (i = 0; i < values.length; i++) {
-    values[i] = new Sk.builtin.nmber(values[i], Sk.builtin.nmber.float$);
-  }
-
-  return values;
-};
-
-numpy.prototype.arange = function (start, stop, step) {
-  if (step === undefined)
-    step = 1.0;
-
-  start *= 1.0;
-  stop *= 1.0;
-  step *= 1.0;
-
-  var res = [];
-  for (var i = start; i < stop; i += step) {
-    res.push(i);
-  }
-
-  return res;
-};
+// ToDo: implement aliases for float64, float32, int32, int64, short...
 
 var $builtinmodule = function (name) {
+    /**
+      Made by Michael Ebert for https://github.com/skulpt/skulpt
+      ndarray implementation inspired by https://github.com/geometryzen/davinci-dev (not compatible with skulpt)
+
+      Some methods are based on the original numpy implementation.
+
+      See http://waywaaard.github.io/skulpt/ for more information.
+    **/
+    /* eslint-disable */
+
+    var NPY_MAXDIMS = 32;
+
+    var numpy = function () {
+      if (typeof mathjs == 'function') {
+        // load mathjs instance
+        this.math = mathjs();
+      } else {
+        Sk.debugout('mathjs not included and callable');
+      }
+    };
+
+    numpy.prototype.arange = function (start, stop, step) {
+      if (step === undefined)
+        step = 1.0;
+
+      start *= 1.0;
+      stop *= 1.0;
+      step *= 1.0;
+
+      var res = [];
+      for (var i = start; i < stop; i += step) {
+        res.push(i);
+      }
+
+      return res;
+    };
+
+    function PyArray_STRIDES(arr) {
+        if (arr && (Sk.abstr.typeName(arr) === CLASS_NDARRAY)) {
+            return computeStrides(arr.v.shape);
+        } else {
+            throw new Error('Internal API-Call Error occured in PyArray_NDIM.', arr);
+        }
+
+    }
+
+    /*
+     *  The number of dimensions in the array.
+     *  Returns a javascript value
+     */
+    function PyArray_NDIM(arr) {
+        if (arr && (Sk.abstr.typeName(arr) === CLASS_NDARRAY)) {
+            return arr.v.shape.length;
+        } else {
+            throw new Error('Internal API-Call Error occured in PyArray_NDIM.', arr);
+        }
+    }
+
+    /*
+     *  Returns a pointer to the dimensions/shape of the array. The number of elements matches the number of dimensions of the array.
+     *  This returns javascript values!
+     */
+    function PyArray_DIMS(arr) {
+        if (arr && (Sk.abstr.typeName(arr) === CLASS_NDARRAY)) {
+            return arr.v.shape;
+        } else {
+            throw new Error('Internal API-Call Error occured in PyArray_NDIM.', arr);
+        }
+    }
+
+    /*
+     *  Return the shape in the nth dimension.
+     */
+    function PyArray_DIM(arr, n) {
+        if (arr && (Sk.abstr.typeName(arr) === CLASS_NDARRAY)) {
+            return arr.v.shape[n];
+        } else {
+            throw new Error('Internal API-Call Error occured in PyArray_NDIM.', arr);
+        }
+    }
+
+    // vdot function for python basic numeric types
+    function OBJECT_vdot(ip1, is1, ip2, is2, op, n, ignore){
+        var i; // npy_intp
+        var tmp0; // PyObject
+        var tmp1; // PyObject
+        var tmp2; // PyObject
+        var tmp = NULL; // PyObject
+        var tmp3; // PyObject **
+
+        /*
+        for (i = 0; i < n; i++, ip1 += is1, ip2 += is2) {
+            if ((*((PyObject **)ip1) == NULL) || (*((PyObject **)ip2) == NULL)) {
+                tmp1 = Py_False;
+            } else {
+                tmp0 = PyObject_CallMethod(*((PyObject **)ip1), "conjugate", NULL);
+                if (tmp0 == NULL) {
+                    return;
+                }
+                tmp1 = PyNumber_Multiply(tmp0, *((PyObject **)ip2));
+                if (tmp1 == NULL) {
+                    return;
+                }
+            }
+            if (i == 0) {
+                tmp = tmp1;
+            } else {
+                tmp2 = PyNumber_Add(tmp, tmp1);
+                if (tmp2 == NULL) {
+                    return;
+                }
+                tmp = tmp2;
+            }
+        }
+        tmp3 = (PyObject**) op;
+        tmp2 = *tmp3;
+        *((PyObject **)op) = tmp;
+        */
+    }
+
+    /**
+     *  Basic dummy impl. The real numpy implementation is about 600 LoC and relies
+     *  on the complete data type impl.
+     *  We just do a basic checking
+     *  obj: any object or nested sequence
+     *  maxdims: maximum number of dimensions to check for dtype (recursive call)
+     */
+    function PyArray_DTypeFromObject(obj, maxdims) {
+        // gets first element or null from a nested sequence
+        function seqUnpacker(obj, mDims) {
+            if (Sk.builtin.checkSequence(obj)) {
+                var length = Sk.builtin.len(obj);
+                if (Sk.builtin.asnum$(length) > 0) {
+                    // ToDo check if element is also of type sequence
+                    var element = obj.mp$subscript(0);
+
+                    // if we have a nested sequence, we decrement the maxdims and call recursive
+                    if (mDims > 0 && Sk.builtin.checkSequence(element)) {
+                        return seqUnpacker(element, mDims -1);
+                    } else {
+                        return element;
+                    }
+                }
+            } else {
+                return obj;
+            }
+        }
+
+        var dtype = null;
+        if (obj === null) {
+            throw new Error('Internal API-Call Error occured in PyArray_ObjectType');
+        }
+
+        if (maxdims == null) {
+            maxdims = NPY_MAXDIMS;
+        }
+
+        // simple type
+        if (Sk.builtin.checkNumber(obj)) {
+            element = obj;
+        } else if (Sk.builtin.checkSequence(obj)) {
+            // sequence
+            element = seqUnpacker(obj, maxdims);
+        } else if (Sk.abstr.typeName(obj) === CLASS_NDARRAY) {
+            // array
+            var length = Sk.builtin.len(obj);
+            if (Sk.builtin.asnum$(length) > 0) {
+                var element = obj.tp$getitem(0);
+            } else {
+                // get dtype from ndarray
+                return obj.v.dtype;
+            }
+        }
+
+        // ToDo: investigate if this throw may happen
+        try {
+            dtype = Sk.builtin.type(element);
+        } catch (e) {
+            // pass
+        }
+
+        return dtype;
+    }
+
+    var NPY_NOTYPE = null;
+    var NPY_DEFAULT_TYPE = 2;
+
+    // our basic internal hierarchy for types
+    // we can only promote from lower to higher numbers
+    var Internal_TypeTable = {
+        'complex': 3,
+        'complex_': 3,
+        'complex64': 3,
+        'float': 2,
+        'float_': 2,
+        'float64': 2,
+        'int': 1,
+        'int_': 1,
+        'int64': 1,
+        'bool': 0,
+        'bool_': 0,
+    };
+
+    function Internal_DType_To_Num(dtype) {
+        var name = Sk.abstr.typeName(dtype);
+        var num = Internal_TypeTable[name];
+
+        if (num == null) {
+            return -1;
+        }
+
+        return num;
+    }
+
+    /**
+     * Not the real impl. as we do not really implement numpys data types and
+     * the 1000s LoC for that. We just use the basic python types.
+     *
+     * This function returns the 'constructor' for the given type number
+     */
+    function PyArray_DescrFromType(typenum) {
+        switch(typenum) {
+        case 3:
+            return Sk.builtin.complex;
+        case 2:
+            return Sk.builtin.float_;
+        case 1:
+            return Sk.builtin.int_;
+        case 0:
+            return Sk.builtin.bool;
+        default:
+            return NPY_NOTYPE;
+        }
+    }
+
+    /*
+     *  This function is useful for determining a common type that two or more arrays can be converted to.
+     *  It only works for non-flexible array types as no itemsize information is passed. The mintype argument
+     *  represents the minimum type acceptable, and op represents the object that will be converted to an array.
+     *  The return value is the enumerated typenumber that represents the data-type that op should have.
+     */
+    function PyArray_ObjectType(op, minimum_type) {
+        // http://docs.scipy.org/doc/numpy/reference/c-api.array.html#c.PyArray_ResultType
+        // this is only and approximate implementation and is not even close to
+        // the real numpy internals, however totally sufficient for our needs
+
+        var dtype;
+
+        dtype = PyArray_DTypeFromObject(op, NPY_MAXDIMS);
+
+        // maybe empty ndarray object?
+        if (dtype != null) {
+            var num = Internal_DType_To_Num(dtype);
+            if (num >= minimum_type) {
+                return num;
+            } else {
+                return NPY_NOTYPE; // NPY_NOTYPE
+            }
+        } else {
+            return NPY_DEFAULT_TYPE;
+        }
+    }
+
+    /*
+     *  A synonym for PyArray_DIMS, named to be consistent with the ‘shape’ usage within Python.
+     */
+    function PyArrray_Shape(arr) {
+        return PyArray_DIMS(arr);
+    }
+
+    /*
+     *  Cast/Promote object to given dtype with some intelligent type handling
+     */
+    function PyArray_Cast_Obj(obj, dtype) {
+        if (dtype instanceof Sk.builtin.none && Sk.builtin.checkNone(obj)) {
+            return obj;
+        } else {
+            return Sk.misceval.callsim(dtype, obj);
+        }
+    }
+
+    // PyObject* PyArray_FromAny(PyObject* op, PyArray_Descr* dtype, int min_depth, int max_depth, int requirements, PyObject* context)
+    /*
+     *  - op: is any value or sequence that will be converted to an array (Python Object)
+     *  - dtype: is callable constructor for the type (ie Sk.builtin.int_) (Python Object)
+     *  - min_depth: we may enfore a minimum of dimensions (Python Int)
+     *  - max_depth: maximum of dimensions (Python Int)
+     *  - requirements: same flags to set, we do not support those (int)
+     *  - context: ???
+     */
+    function PyArray_FromAny(op, dtype, min_depth, max_depth, requirements, context) {
+        if (op == null) {
+            throw new Error('Internal PyArray_FromAny API-Call error. "op" must not be null.');
+        }
+
+        if (dtype == null || Sk.builtin.checkNone(dtype)) {
+            dtype = PyArray_DTypeFromObject(op, NPY_MAXDIMS);
+            if (dtype == null) {
+                dtype = NPY_DEFAULT_TYPE;
+            }
+        }
+
+        // now get items from op and create a new buffer object.
+        var elements = [];
+        var state = {};
+        state.level = 0;
+        state.shape = [];
+
+        unpack(op, elements, state);
+
+        // apply dtype castings
+        for (i = 0; i < elements.length; i++) {
+            elements[i] = PyArray_Cast_Obj(elements[i], dtype);
+        }
+
+        // check for min_depth
+        var ndmin = Sk.builtin.asnum$(min_depth);
+        if (ndmin >= 0 && ndmin > state.shape.length) {
+          var _ndmin_array = [];
+          for (i = 0; i < ndmin - state.shape.length; i++) {
+            _ndmin_array.push(1);
+          }
+          state.shape = _ndmin_array.concat(state.shape);
+        }
+
+        // call array method or create internal ndarray constructor
+        var _shape = new Sk.builtin.tuple(state.shape.map(function (x) {
+            return new Sk.builtin.int_(x);
+        }));
+
+        var _buffer = new Sk.builtin.list(elements);
+        // create new ndarray instance
+        return Sk.misceval.callsim(mod[CLASS_NDARRAY], _shape, dtype,
+          _buffer);
+    }
+
+    /*NUMPY_API
+     * Numeric.matrixproduct(a,v)
+     * just like inner product but does the swapaxes stuff on the fly
+     */
+    // from multiarraymodule.c Line: 940
+    function MatrixProdcut(op1, op2) {
+        return this.MatrixProduct2(op1, op2, null);
+    }
+
+    /*NUMPY_API
+     * Numeric.matrixproduct2(a,v,out)
+     * just like inner product but does the swapaxes stuff on the fly
+     */
+    function MatrixProdcut(op1, op2, out) {
+        var ap1; // PyArrayObject
+        var ap2; // PyArrayObject
+        var ret = null; // PyArrayObject
+        var i; // npy_intp (int pointer)
+        var j; // npy_intp (int pointer)
+        var l; // npy_intp (int pointer)
+        var typenum; // int
+        var nd; // int
+        var axis; // int
+        var matchDim; // int
+        var is1; // npy_intp
+        var is2; // npy_intp
+        var os; // npy_intp
+        var op; // char *op
+        var dimensions = new Array(); // npy_intp dimensions[NPY_MAXDIMS];
+        var dot; // PyArrray_DotFunc *dot
+        var typec = null; // PyArray_Descr *typec = NULL;
+
+        // make new pyarray object types from ops
+        typenum = PyArray_ObjectType(op1, 0);
+        typenum = PyArray_ObjectType(op2, typenum);
+
+        // get type descriptor for the type, for us it is the javascript constructor
+        // of the type, that we store as a dtype
+        typec = PyArray_DescrFromType(typenum);
+
+        // we currently do not support this specific check for common data type
+        if (typec === null) {
+            throw new Sk.builtin.ValueError('Cannot find a common data type.');
+        }
+
+        ap1 = PyArray_FromAny(op1, typec, 0, 0, 'NPY_ARRAY_ALINGED', null);
+        ap2 = PyArray_FromAny(op2, typec, 0, 0, 'NPY_ARRAY_ALINGED', null);
+
+        // check dimensions
+
+        // handle 0 dim cases
+        if (PyArray_NDIM(ap1) == 0 || PyArray_DIM(ap2) == 0) {
+            ret = PyArray_NDIM(ap1) == 0 ? ap1 : ap2;
+            ret = ret.nb$multiply(ap1, ap2);
+
+            return ret;
+        }
+
+        l = PyArray_DIMS(ap1)[PyArray_NDIM(ap1) - 1];
+        if (PyArray_NDIM(ap2) > 1) {
+            matchDim = PyArray_NDIM(ap2) - 2;
+        } else {
+            matchDim = 0;
+        }
+
+        if (PyArray_DIMS(ap2)[matchDim] != l) {
+            // dot_alignment_error(ap1, PyArray_NDIM(ap1) - 1, ap2, matchDim);
+            throw new Sk.builtin.ValueError('shapes are not aligned');
+        }
+
+        nd = PyArray_NDIM(ap1) + PyArray_NDIM(ap2) - 2;
+        if (nd > NPY_MAXDIMS) {
+            throw new Sk.builtin.ValueError('dot: too many dimensions in result');
+        }
+
+        j = 0;
+        for (i = 0; i < PyArray_NDIM(ap1) - 1; i++) {
+            dimensions[j++] = PyArray_DIMS(ap1)[i];
+        }
+        for (i = 0; i < PyArray_NDIM(ap2) - 2; i++) {
+            dimensions[j++] = PyArray_DIMS(ap2)[i];
+        }
+        if(PyArray_NDIM(ap2) > 1) {
+            dimensions[j++] = PyArray_DIMS(ap2)[PyArray_NDIM(ap2)-1];
+        }
+
+        is1 = PyArray_STRIDES(ap1)[PyArray_NDIM(ap1)-1];
+        is2 = PyArray_STRIDES(ap2)[matchDim];
+        /* Choose which subtype to return */
+        //ret = new_array_for_sum(ap1, ap2, out, nd, dimensions, typenum);
+
+        // create new empty array for given dimensions
+        ret = Sk.misceval.callsim(mod.zeros, dimensions, typec);
+
+        // ToDo: check if both types allow dot multiplication
+        //dot = PyArray_DESCR(ret)->f->dotfunc;
+        //if (dot == NULL) {
+        //    PyErr_SetString(PyExc_ValueError,
+        //                    "dot not available for this type");
+        //    goto fail;
+        //}
+
+
+        return null;
+    }
+
   var np = new numpy();
 
   var mod = {};
@@ -702,8 +1103,8 @@ var $builtinmodule = function (name) {
   /**
    Trigonometric functions, all element wise
   **/
-  mod.pi = Sk.builtin.assk$(np.math ? np.math.PI : Math.PI, Sk.builtin.nmber.float$);
-  mod.e = Sk.builtin.assk$(np.math ? np.math.E : Math.E, Sk.builtin.nmber.float$);
+  mod.pi = Sk.builtin.float_(np.math ? np.math.PI : Math.PI);
+  mod.e = Sk.builtin.float_(np.math ? np.math.E : Math.E);
   /**
   Trigonometric sine, element-wise.
   **/
@@ -721,8 +1122,7 @@ var $builtinmodule = function (name) {
       var _buffer = ndarrayJs.buffer.map(function (value) {
         num = Sk.builtin.asnum$(value);
         res = op.call(null, num);
-        return new Sk.builtin.nmber(res, Sk.builtin.nmber
-          .float$);
+        return new Sk.builtin.float_(res);
       });
 
       var shape = new Sk.builtin.tuple(ndarrayJs.shape.map(function (x) {
@@ -734,8 +1134,7 @@ var $builtinmodule = function (name) {
     } else if (Sk.builtin.checkNumber(x)) {
       num = Sk.builtin.asnum$(x);
       res = op.call(null, num);
-      return new Sk.builtin.nmber(res, Sk.builtin.nmber
-        .float$);
+      return new Sk.builtin.float_(res);
     }
 
     throw new Sk.builtin.TypeError('Unsupported argument type for "x"');
@@ -1018,63 +1417,23 @@ var $builtinmodule = function (name) {
   var array_f = function (object, dtype, copy, order, subok, ndmin) {
     Sk.builtin.pyCheckArgs("array", arguments, 1, 6);
 
+    // ToDo: use PyArray_FromAny here and then do some checkings for the type
+    // and maybe casting and support ndmin param
+    // see http://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html#numpy.array
+
     if (object === undefined)
       throw new Sk.builtin.TypeError("'" + Sk.abstr.typeName(object) +
         "' object is undefined");
 
-    var elements = [];
-    var state = {};
-    state.level = 0;
-    state.shape = [];
-
-    unpack(object, elements, state);
-
-    var i;
-    // apply dtype casting function, if it has been provided
-    if (dtype && Sk.builtin.checkClass(dtype)) {
-      for (i = 0; i < elements.length; i++) {
-        elements[i] = Sk.misceval.callsim(dtype, elements[i]);
-      }
-    } else {
-      // check elements and find first usable type
-      // should be refactored
-      for (i = 0; i < elements.length; i++) {
-        if (elements[i] && isNaN(elements[i])) {
-          dtype = Sk.builtin.float_;
-          break;
-        } else if (typeof elements[i] == 'string') {
-          dtype = Sk.builtin.str;
-        } else {
-          dtype = Sk.builtin.float_;
-        }
-      }
-    }
-
     // check for ndmin param
-    if (ndmin) {
-      if (Sk.builtin.checkNumber(ndmin)) {
-        var _ndmin = Sk.builtin.asnum$(ndmin);
-        if (_ndmin >= 0 && _ndmin > state.shape.length) {
-          var _ndmin_array = [];
-          for (i = 0; i < _ndmin - state.shape.length; i++) {
-            _ndmin_array.push(1);
-          }
-          state.shape = _ndmin_array.concat(state.shape);
-        }
-      } else {
-        throw new Sk.builtin.TypeError(
-          'Parameter "ndmin" must be of type "int"');
-      }
+    if (ndmin != null && Sk.builtin.checkInt(ndmin) === false) {
+      throw new Sk.builtin.TypeError('Parameter "ndmin" must be of type "int"');
     }
 
-    var _shape = new Sk.builtin.tuple(state.shape.map(function (x) {
-      return new Sk.builtin.int_(x);
-    }));
+    debugger;
+    var py_ndarray = PyArray_FromAny(object, dtype, ndmin);
 
-    var _buffer = new Sk.builtin.list(elements);
-    // create new ndarray instance
-    return Sk.misceval.callsim(mod[CLASS_NDARRAY], _shape, dtype,
-      _buffer);
+    return py_ndarray;
   };
 
   array_f.co_varnames = ['object', 'dtype', 'copy', 'order',
@@ -1192,7 +1551,7 @@ var $builtinmodule = function (name) {
   mod.ones = new Sk.builtin.func(ones_f);
 
   /**
-    Return a new array of given shape and type, filled with ones.
+    Return a new array of given shape and type, filled with None.
   **/
   var empty_f = function (shape, dtype, order) {
     Sk.builtin.pyCheckArgs("empty", arguments, 1, 3);
@@ -1261,6 +1620,7 @@ var $builtinmodule = function (name) {
     var a_size = np.math.size(a_matrix);
     var b_size = np.math.size(b_matrix);
 
+    // check for correct dimensions
 
     if (a_size.length >= 1 && b_size.length > 1) {
       if (a_size[a_size.length - 1] != b_size[b_size - 2]) {
@@ -1285,6 +1645,15 @@ var $builtinmodule = function (name) {
     Sk.builtin.none.none$
   ];
   mod.dot = new Sk.builtin.func(dot_f);
+
+  // https://github.com/numpy/numpy/blob/master/numpy/core/src/multiarray/multiarraymodule.c#L2252
+  var vdot_f = function(a, b) {
+        // a and b must be array like
+        // if a or b have more than 1 dim => flatten them
+
+
+  }
+  mod.vdot = new Sk.builtin.func(vdot_f);
 
   /* not implemented methods */
   mod.ones_like = new Sk.builtin.func(function () {

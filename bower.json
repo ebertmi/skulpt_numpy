@@ -1,0 +1,23 @@
+{
+  "name": "skulpt_numpy",
+  "version": "0.0.1",
+  "main": [ "./numpy/__init__.js", "./numpy/random/__init__.js" ],
+  "description": "Partial numpy implementation for skulpt",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/waywaaard/skulpt_numpy.git"
+  },
+  "bugs": {
+    "url": "https://github.com/waywaaard/skulpt_numpy/issues"
+  },
+  "licenses": [
+    {
+      "type": "MIT",
+      "url": "https://github.com/skulpt/skulpt/LICENSE"
+    }
+  ],
+  "dependencies": {
+  },
+  "ignore": [
+  ]
+}

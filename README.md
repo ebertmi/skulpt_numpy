@@ -10,6 +10,7 @@ This is a partial port of some numpy functions for skulpt. Mainly, focused on
 - added ```ndarray.T``` attribute
 - added ```__getattr__```
 - added ```__setattr__```
+- added ```numpy.vdot```
 
 Example:
 ```python
@@ -23,6 +24,12 @@ a.shape = (1, 2, 2)
 print(a.T)
 a.shape = 4
 print(a)
+
+a = np.array([[1j, 2j], [3j, 4j]])
+b = [1, 2, 3, 4]
+c = np.vdot(a, b)
+
+print(c)
 ```
 
 ##Supported

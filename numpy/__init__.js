@@ -43,7 +43,7 @@ var $builtinmodule = function (name) {
      */
     function PyArray_Return(arr) {
         if (arr && (Sk.abstr.typeName(arr) === CLASS_NDARRAY)) {
-            var dim = PyArray_NDIM(arr, 0);
+            var dim = PyArray_DIM(arr, 0);
             if (dim === 0) {
                 return PyArray_DATA(arr)[0]; // return the only element
             } else {
@@ -175,6 +175,15 @@ var $builtinmodule = function (name) {
      *
      */
     function OBJECT_vdot(ip1, is1, ip2, is2, op, n, ignore){
+        function tryConjugate(pyObj) {
+            var f = pyObj.tp$getattr("conjugate");
+            if (f) {
+                return Sk.misceval.callsim(pyObj['conjugate'], pyObj);
+            } else {
+                return pyObj; // conjugate for non complex types is just the real part
+            }
+        }
+
         var i; // npy_intp
         var tmp0; // PyObject
         var tmp1; // PyObject
@@ -184,13 +193,13 @@ var $builtinmodule = function (name) {
 
         var ip1_i = 0;
         var ip2_i = 0;
-        debugger;
+
         for (i = 0; i < n; i++, ip1_i += is1, ip2_i += is2) {
             if (ip1[ip1_i] == null || ip2[ip2_i] == null) {
                 tmp1 = Sk.builtin.bool.false$;
             } else {
                 // try to call the conjugate function / each numeric type can call this
-                tmp0 = Sk.misceval.callsim(ip1[ip1_i]['conjugate'], ip1[ip1_i], ip1[ip1_i]);
+                tmp0 = Sk.misceval.callsim(ip1[ip1_i]['conjugate'], ip1[ip1_i]);
 
                 if (tmp0 == null) {
                     return;
@@ -355,8 +364,13 @@ var $builtinmodule = function (name) {
             var num = Internal_DType_To_Num(dtype);
             if (num >= minimum_type) {
                 return num;
-            } else {
-                return NPY_NOTYPE; // NPY_NOTYPE
+            } else if(num < minimum_type) {
+                // can we convert one type into the other?
+                if (num >= 0 && minimum_type <= 3) {
+                    return minimum_type;
+                } else {
+                    return NPY_NOTYPE; // NPY_NOTYPE
+                }
             }
         } else {
             return NPY_DEFAULT_TYPE;
@@ -1805,7 +1819,7 @@ var $builtinmodule = function (name) {
         var ret = null;
         var type;
         var vdot;
-
+debugger;
         typenum = PyArray_ObjectType(op1, 0);
         typenum = PyArray_ObjectType(op2, typenum);
 
@@ -1861,7 +1875,7 @@ var $builtinmodule = function (name) {
             vdot = OBJECT_vdot;
             break;
         default:
-            throw new ValueError('function not available for this data type');
+            throw new Sk.builtin.ValueError('function not available for this data type');
         }
 
         // call vdot function with vectors

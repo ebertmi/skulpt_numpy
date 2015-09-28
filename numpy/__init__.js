@@ -2,12 +2,12 @@
 
 var $builtinmodule = function (name) {
     /**
-      Made by Michael Ebert for https://github.com/skulpt/skulpt
-      ndarray implementation inspired by https://github.com/geometryzen/davinci-dev (not compatible with skulpt)
+        Made by Michael Ebert for https://github.com/skulpt/skulpt
+        ndarray implementation inspired by https://github.com/geometryzen/davinci-dev (not compatible with skulpt)
 
-      Some methods are based on the original numpy implementation.
+        Some methods are based on the original numpy implementation.
 
-      See http://waywaaard.github.io/skulpt/ for more information.
+        See http://waywaaard.github.io/skulpt/ for more information.
     **/
     /* eslint-disable */
 
@@ -38,13 +38,79 @@ var $builtinmodule = function (name) {
       return res;
     };
 
+    /*
+     * This function checks to see if arr is a 0-dimensional array and, if so, returns the appropriate array scalar. It should be used whenever 0-dimensional arrays could be returned to Python.
+     */
+    function PyArray_Return(arr) {
+        if (arr && (Sk.abstr.typeName(arr) === CLASS_NDARRAY)) {
+            var dim = PyArray_NDIM(arr, 0);
+            if (dim === 0) {
+                return PyArray_DATA(arr)[0]; // return the only element
+            } else {
+                return arr;
+            }
+        } else {
+            throw new Error('Internal API-Call Error occured in PyArray_NDIM.', arr);
+        }
+    }
+
+    function PyArray_UNPACK_SHAPE(arr, shape) {
+        var js_shape;
+        if (Sk.builtin.checkInt(shape)) {
+            js_shape = [Sk.ffi.remapToJs(shape)];
+        } else {
+            js_shape = Sk.ffi.remapToJs(shape);
+        }
+
+        // special auto shape infering
+        if (js_shape[0] === -1) {
+            if (js_shape.length === 1) {
+                js_shape[0] = PyArray_SIZE(arr);
+            } else {
+                var n_size = prod(js_shape.slice(1));
+                var n_firstDim = PyArray_SIZE(arr) / n_size;
+                js_shape[0] = n_firstDim;
+            }
+        }
+
+        if (prod(js_shape) !== PyArray_SIZE(arr)) {
+            throw new ValueError('total size of new array must be unchanged');
+        }
+
+        return js_shape;
+    }
+
+    function PyArray_SIZE(arr) {
+        if (arr && (Sk.abstr.typeName(arr) === CLASS_NDARRAY)) {
+            return prod(arr.v.shape);
+        } else {
+            throw new Error('Internal API-Call Error occured in PyArray_NDIM.', arr);
+        }
+    }
+
+    function PyArray_DATA(arr) {
+        if (arr && (Sk.abstr.typeName(arr) === CLASS_NDARRAY)) {
+            return arr.v.buffer;
+        } else {
+            throw new Error('Internal API-Call Error occured in PyArray_NDIM.', arr);
+        }
+    }
+
     function PyArray_STRIDES(arr) {
         if (arr && (Sk.abstr.typeName(arr) === CLASS_NDARRAY)) {
             return computeStrides(arr.v.shape);
         } else {
             throw new Error('Internal API-Call Error occured in PyArray_NDIM.', arr);
         }
+    }
 
+    function PyArray_STRIDE(arr, n) {
+        if (arr && (Sk.abstr.typeName(arr) === CLASS_NDARRAY)) {
+            var strides = computeStrides(arr.v.shape);
+            return strides[n];
+        } else {
+            throw new Error('Internal API-Call Error occured in PyArray_NDIM.', arr);
+        }
     }
 
     /*
@@ -82,43 +148,76 @@ var $builtinmodule = function (name) {
         }
     }
 
+    function PyArray_NewShape(arr, shape, order) {
+        if (arr && (Sk.abstr.typeName(arr) === CLASS_NDARRAY)) {
+            var py_shape = new Sk.builtin.tuple(shape.map(
+              function (x) {
+                return new Sk.builtin.int_(x);
+            }));
+
+             var py_order = Sk.ffi.remapToPy(order);
+            return Sk.misceval.callsim(arr.reshape, arr, py_shape, py_order);
+        } else {
+            throw new Error('Internal API-Call Error occured in PyArray_NDIM.', arr);
+        }
+    }
+
     // vdot function for python basic numeric types
+    // https://github.com/numpy/numpy/blob/467d4e16d77a2e7c131aac53c639e82b754578c7/numpy/core/src/multiarray/vdot.c
+    /*
+     *  ip1: vector 1
+     *  ip2: vector 2
+     *  is1: stride of vector 1
+     *  is2: stride of vector 2
+     *  op: new nd_array data buffer for the result
+     *  n:  number of elements in ap1 first dim
+     *  ignore: not used anymore, however still existing for old api calls
+     *
+     */
     function OBJECT_vdot(ip1, is1, ip2, is2, op, n, ignore){
         var i; // npy_intp
         var tmp0; // PyObject
         var tmp1; // PyObject
         var tmp2; // PyObject
-        var tmp = NULL; // PyObject
+        var tmp = null; // PyObject
         var tmp3; // PyObject **
 
-        /*
-        for (i = 0; i < n; i++, ip1 += is1, ip2 += is2) {
-            if ((*((PyObject **)ip1) == NULL) || (*((PyObject **)ip2) == NULL)) {
-                tmp1 = Py_False;
+        var ip1_i = 0;
+        var ip2_i = 0;
+        debugger;
+        for (i = 0; i < n; i++, ip1_i += is1, ip2_i += is2) {
+            if (ip1[ip1_i] == null || ip2[ip2_i] == null) {
+                tmp1 = Sk.builtin.bool.false$;
             } else {
-                tmp0 = PyObject_CallMethod(*((PyObject **)ip1), "conjugate", NULL);
-                if (tmp0 == NULL) {
+                // try to call the conjugate function / each numeric type can call this
+                tmp0 = Sk.misceval.callsim(ip1[ip1_i]['conjugate'], ip1[ip1_i], ip1[ip1_i]);
+
+                if (tmp0 == null) {
                     return;
                 }
-                tmp1 = PyNumber_Multiply(tmp0, *((PyObject **)ip2));
-                if (tmp1 == NULL) {
+
+                tmp1 = Sk.abstr.numberBinOp(tmp0, ip2[ip2_i], 'Mult');
+                if (tmp1 == null) {
                     return;
                 }
             }
-            if (i == 0) {
+
+            if (i === 0) {
                 tmp = tmp1;
             } else {
-                tmp2 = PyNumber_Add(tmp, tmp1);
-                if (tmp2 == NULL) {
+                tmp2 = Sk.abstr.numberBinOp(tmp, tmp1, 'Add');
+                //tmp2 = tmp + tmp1; // PyNumber_Add
+
+                if (tmp2 == null) {
                     return;
                 }
                 tmp = tmp2;
             }
         }
-        tmp3 = (PyObject**) op;
-        tmp2 = *tmp3;
-        *((PyObject **)op) = tmp;
-        */
+
+        tmp3 = op;
+        tmp2 = tmp3;
+        op[0] = tmp;
     }
 
     /**
@@ -168,7 +267,7 @@ var $builtinmodule = function (name) {
             // array
             var length = Sk.builtin.len(obj);
             if (Sk.builtin.asnum$(length) > 0) {
-                var element = obj.tp$getitem(0);
+                var element = PyArray_DATA(obj)[0];
             } else {
                 // get dtype from ndarray
                 return obj.v.dtype;
@@ -303,13 +402,20 @@ var $builtinmodule = function (name) {
             }
         }
 
-        // now get items from op and create a new buffer object.
         var elements = [];
         var state = {};
         state.level = 0;
         state.shape = [];
 
-        unpack(op, elements, state);
+        if (Sk.abstr.typeName(op) == CLASS_NDARRAY) {
+            elements = PyArray_DATA(op);
+            state = {};
+            state.level = 0;
+            state.shape = PyArray_DIMS(op);;
+        } else {
+            // now get items from op and create a new buffer object.
+            unpack(op, elements, state);
+        }
 
         // apply dtype castings
         for (i = 0; i < elements.length; i++) {
@@ -349,6 +455,7 @@ var $builtinmodule = function (name) {
     /*NUMPY_API
      * Numeric.matrixproduct2(a,v,out)
      * just like inner product but does the swapaxes stuff on the fly
+     * https://github.com/numpy/numpy/blob/d033b6e19fc95a1f1fd6592de8318178368011b1/numpy/core/src/multiarray/methods.c#L2037
      */
     function MatrixProdcut(op1, op2, out) {
         var ap1; // PyArrayObject
@@ -451,8 +558,8 @@ var $builtinmodule = function (name) {
   mod.__doc__ = new Sk.builtin.str('\nNumPy\n=====\n\nProvides\n  1. An array object of arbitrary homogeneous items\n  2. Fast mathematical operations over arrays\n  3. Linear Algebra, Fourier Transforms, Random Number Generation\n\nHow to use the documentation\n----------------------------\nDocumentation is available in two forms: docstrings provided\nwith the code, and a loose standing reference guide, available from\n`the NumPy homepage <http://www.scipy.org>`_.\n\nWe recommend exploring the docstrings using\n`IPython <http://ipython.scipy.org>`_, an advanced Python shell with\nTAB-completion and introspection capabilities.  See below for further\ninstructions.\n\nThe docstring examples assume that `numpy` has been imported as `np`::\n\n  >>> import numpy as np\n\nCode snippets are indicated by three greater-than signs::\n\n  >>> x = 42\n  >>> x = x + 1\n\nUse the built-in ``help`` function to view a function\'s docstring::\n\n  >>> help(np.sort)\n  ... # doctest: +SKIP\n\nFor some objects, ``np.info(obj)`` may provide additional help.  This is\nparticularly true if you see the line "Help on ufunc object:" at the top\nof the help() page.  Ufuncs are implemented in C, not Python, for speed.\nThe native Python help() does not know how to view their help, but our\nnp.info() function does.\n\nTo search for documents containing a keyword, do::\n\n  >>> np.lookfor(\'keyword\')\n  ... # doctest: +SKIP\n\nGeneral-purpose documents like a glossary and help on the basic concepts\nof numpy are available under the ``doc`` sub-module::\n\n  >>> from numpy import doc\n  >>> help(doc)\n  ... # doctest: +SKIP\n\nAvailable subpackages\n---------------------\ndoc\n    Topical documentation on broadcasting, indexing, etc.\nlib\n    Basic functions used by several sub-packages.\nrandom\n    Core Random Tools\nlinalg\n    Core Linear Algebra Tools\nfft\n    Core FFT routines\npolynomial\n    Polynomial tools\ntesting\n    Numpy testing tools\nf2py\n    Fortran to Python Interface Generator.\ndistutils\n    Enhancements to distutils with support for\n    Fortran compilers support and more.\n\nUtilities\n---------\ntest\n    Run numpy unittests\nshow_config\n    Show numpy build configuration\ndual\n    Overwrite certain functions with high-performance Scipy tools\nmatlib\n    Make everything matrices.\n__version__\n    Numpy version string\n\nViewing documentation using IPython\n-----------------------------------\nStart IPython with the NumPy profile (``ipython -p numpy``), which will\nimport `numpy` under the alias `np`.  Then, use the ``cpaste`` command to\npaste examples into the shell.  To see which functions are available in\n`numpy`, type ``np.<TAB>`` (where ``<TAB>`` refers to the TAB key), or use\n``np.*cos*?<ENTER>`` (where ``<ENTER>`` refers to the ENTER key) to narrow\ndown the list.  To view the docstring for a function, use\n``np.cos?<ENTER>`` (to view the docstring) and ``np.cos??<ENTER>`` (to view\nthe source code).\n\nCopies vs. in-place operation\n-----------------------------\nMost of the functions in `numpy` return a copy of the array argument\n(e.g., `np.sort`).  In-place versions of these functions are often\navailable as array methods, i.e. ``x = np.array([1,2,3]); x.sort()``.\nExceptions to this rule are documented.\n\n');
 
   /**
-    Class for numpy.ndarray
-  **/
+        Class for numpy.ndarray
+    **/
   var CLASS_NDARRAY = "numpy.ndarray";
 
   function remapToJs_shallow(obj, shallow) {
@@ -475,8 +582,8 @@ var $builtinmodule = function (name) {
   }
 
   /**
-    Unpacks in any form fo nested Lists
-  **/
+        Unpacks in any form fo nested Lists
+    **/
   function unpack(py_obj, buffer, state) {
     if (py_obj instanceof Sk.builtin.list || py_obj instanceof Sk.builtin.tuple) {
       var py_items = remapToJs_shallow(py_obj);
@@ -527,7 +634,7 @@ var $builtinmodule = function (name) {
 
   /**
     Calculates the size of the ndarray, dummy
-  **/
+    **/
   function prod(numbers) {
     var size = 1;
     var i;
@@ -538,9 +645,9 @@ var $builtinmodule = function (name) {
   }
 
   /**
-    Creates a string representation for given buffer and shape
-    buffer is an ndarray
-  **/
+        Creates a string representation for given buffer and shape
+        buffer is an ndarray
+    **/
   function stringify(buffer, shape, dtype) {
     var emits = shape.map(function (x) {
       return 0;
@@ -587,11 +694,7 @@ var $builtinmodule = function (name) {
 
     /* Base case */
     if (startdim >= shape.length) {
-      if (dtype && dtype === Sk.builtin.float_) {
-        return new Sk.builtin.float_(buffer[0]); // handle float special case
-      } else {
-        return Sk.ffi.remapToPy(buffer[0]);
-      }
+        return buffer[0];
     }
 
     n = shape[startdim];
@@ -610,43 +713,11 @@ var $builtinmodule = function (name) {
   }
 
   /**
-   internal tolist interface
-  **/
+     internal tolist interface
+    **/
   function tolist(buffer, shape, strides, dtype) {
     var buffer_copy = buffer.slice(0);
     return tolistrecursive(buffer_copy, shape, strides, 0, dtype);
-  }
-
-  /**
-    Updates all attributes of the numpy.ndarray
-    ToDo: use custom get/set attr that also call the appropriate functions when changed
-  **/
-  function updateAttributes(self, ndarrayJs) {
-    Sk.abstr.sattr(self, 'ndmin', new Sk.builtin.int_(ndarrayJs.shape.length));
-    Sk.abstr.sattr(self, 'dtype', ndarrayJs.dtype);
-    Sk.abstr.sattr(self, 'shape', new Sk.builtin.tuple(ndarrayJs.shape.map(
-      function (x) {
-        return new Sk.builtin.int_(x);
-      })));
-    Sk.abstr.sattr(self, 'strides', new Sk.builtin.tuple(ndarrayJs.strides.map(
-      function (x) {
-        return new Sk.builtin.int_(x);
-      })));
-    Sk.abstr.sattr(self, 'size', new Sk.builtin.int_(prod(ndarrayJs.shape)));
-    Sk.abstr.sattr(self, 'data', new Sk.ffi.remapToPy(ndarrayJs.buffer));
-
-    /*
-    this can cause and infinite loop, we need to refactor our attribute handling
-    if (ndarrayJs.shape.length < 2) {
-        py_T = self;
-    } else {
-        py_T = Sk.misceval.callsim(self.transpose, self);
-    }
-
-    Sk.abstr.sattr(self, 'T', py_T);
-    */
-
-    // http://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.T.html#numpy.ndarray.T
   }
 
   /**
@@ -671,21 +742,87 @@ var $builtinmodule = function (name) {
       ndarrayJs.strides = computeStrides(ndarrayJs.shape);
       ndarrayJs.dtype = dtype || Sk.builtin.none.none$;
 
+      // allow any nested data structure
       if (buffer && buffer instanceof Sk.builtin.list) {
-        ndarrayJs.buffer = Sk.ffi.remapToJs(buffer);
+        ndarrayJs.buffer = buffer.v; // ToDo: change this to any sequence and iterate over objects?
       }
 
       self.v = ndarrayJs; // value holding the actual js object and array
       self.tp$name = CLASS_NDARRAY; // set class name
-
-      updateAttributes(self, ndarrayJs);
     });
 
-    $loc.tp$getattr = Sk.builtin.object.prototype.GenericGetAttr;
+    $loc._internalGenericGetAttr = Sk.builtin.object.prototype.GenericSetAttr;
+
+    $loc.__getattr__ = new Sk.builtin.func(function (self, name) {
+        if (name != null && (Sk.builtin.checkString(name) || typeof name === "string")) {
+            var _name = name;
+
+            // get javascript string
+            if (Sk.builtin.checkString(name)) {
+                _name = Sk.ffi.remapToJs(name);
+            }
+
+            switch (_name) {
+            case 'ndmin':
+                return new Sk.builtin.int_(PyArray_NDIM(self));
+            case 'dtype':
+                return self.v.dtype;
+            case 'shape':
+                return new Sk.builtin.tuple(PyArray_DIMS(self).map(
+                  function (x) {
+                    return new Sk.builtin.int_(x);
+                  }));
+            case 'strides':
+                return new Sk.builtin.tuple(PyArray_STRIDES(self).map(
+                  function (x) {
+                    return new Sk.builtin.int_(x);
+                  }));
+            case 'size':
+                return new Sk.builtin.int_(PyArray_SIZE(self));
+            case 'data':
+                return new Sk.builtin.list(PyArray_DATA(self));
+            case 'T':
+                if (PyArray_NDIM(self) < 2) {
+                    return self;
+                } else {
+                    return Sk.misceval.callsim(self.transpose, self);
+                }
+            }
+        }
+
+        // if we have not returned yet, try the genericgetattr
+        return Sk.misceval.callsim(self.__getattribute__, self, name);
+    });
 
     // ToDo: setAttribute should be implemented, change of shape causes resize
     // ndmin cannot be set, etc...
-    $loc.tp$setattr = Sk.builtin.object.prototype.GenericSetAttr;
+    $loc.__setattr__ = new Sk.builtin.func(function (self, name, value) {
+        if (name != null && (Sk.builtin.checkString(name) || typeof name === "string")) {
+            var _name = name;
+
+            // get javascript string
+            if (Sk.builtin.checkString(name)) {
+                _name = Sk.ffi.remapToJs(name);
+            }
+
+            switch (_name) {
+                case 'shape':
+                    // trigger reshape;
+                    if (value instanceof Sk.builtin.tuple || value instanceof Sk.builtin.list || Sk.builtin.checkInt(value)) {
+                        var js_shape = PyArray_UNPACK_SHAPE(self, value);
+
+                        // ToDo: shape unpacking: seq/int => tuple (js array)
+                        self.v.shape = js_shape;
+                    } else {
+                        throw new TypeError('expected sequence object with len >= 0 or a single integer');
+                    }
+                    return;
+            }
+        }
+
+        // builtin: --> all is readonly (I am not happy with this)
+        throw new Sk.builtin.AttributeError("'ndarray' object attribute '" + name + "' is readonly");
+    });
 
     /*
       Return the array as a (possibly nested) list.
@@ -702,9 +839,15 @@ var $builtinmodule = function (name) {
     });
 
     $loc.reshape = new Sk.builtin.func(function (self, shape, order) {
-      Sk.builtin.pyCheckArgs("reshape", arguments, 2, 3);
-      var ndarrayJs = Sk.ffi.remapToJs(self);
-      return Sk.misceval.callsim(mod[CLASS_NDARRAY], shape, ndarrayJs.dtype,
+        Sk.builtin.pyCheckArgs("reshape", arguments, 2, 3);
+        var ndarrayJs = Sk.ffi.remapToJs(self);
+        // if the first dim is -1, then the size in infered from the size
+        // and the other dimensions
+        var js_shape = PyArray_UNPACK_SHAPE(self, shape);
+
+        // create python object for shape
+        var py_shape = Sk.ffi.remapToPy(js_shape);
+        return Sk.misceval.callsim(mod[CLASS_NDARRAY], py_shape, ndarrayJs.dtype,
         new Sk.builtin.list(ndarrayJs.buffer));
     });
 
@@ -982,13 +1125,13 @@ var $builtinmodule = function (name) {
           _buffer = [];
           for (i = 0, len = lhs.length; i < len; i++) {
             //_buffer[i] = operation(lhs[i], rhs[i]);
-            _buffer[i] = Sk.abstr.binary_op_(Sk.ffi.remapToPy(lhs[i]), Sk.ffi.remapToPy(rhs[i]), operation);
+            _buffer[i] = Sk.abstr.binary_op_(lhs[i], rhs[i], operation);
           }
         } else {
           lhs = ndarrayJs.buffer;
           _buffer = [];
           for (i = 0, len = lhs.length; i < len; i++) {
-            _buffer[i] = Sk.abstr.numberBinOp(Sk.ffi.remapToPy(lhs[i]), other, operation);
+            _buffer[i] = Sk.abstr.numberBinOp(lhs[i], other, operation);
           }
         }
 
@@ -1008,7 +1151,7 @@ var $builtinmodule = function (name) {
         var rhsBuffer = ndarrayJs.buffer;
         var _buffer = [];
         for (var i = 0, len = rhsBuffer.length; i < len; i++) {
-          _buffer[i] = Sk.abstr.numberBinOp(other, Sk.ffi.remapToPy(rhsBuffer[i]), operation);
+          _buffer[i] = Sk.abstr.numberBinOp(other, rhsBuffer[i], operation);
         }
         var shape = new Sk.builtin.tuple(ndarrayJs.shape.map(function (x) {
           return new Sk.builtin.int_(x);
@@ -1025,7 +1168,7 @@ var $builtinmodule = function (name) {
       return function (self) {
         var ndarrayJs = Sk.ffi.remapToJs(self);
         var _buffer = ndarrayJs.buffer.map(function (value) {
-          return Sk.abstr.numberUnaryOp(Sk.ffi.remapToPy(value), operation);
+          return Sk.abstr.numberUnaryOp(value, operation);
         });
         var shape = new Sk.builtin.tuple(ndarrayJs.shape.map(function (x) {
           return new Sk.builtin.int_(x);
@@ -1069,7 +1212,7 @@ var $builtinmodule = function (name) {
       Sk.builtin.pyCheckArgs("__pow__", arguments, 2, 2);
       var ndarrayJs = Sk.ffi.remapToJs(self);
       var _buffer = ndarrayJs.buffer.map(function (value) {
-        return Sk.builtin.pow(Sk.ffi.remapToPy(value), other);
+        return Sk.builtin.pow(value, other);
       });
       var shape = new Sk.builtin.tuple(ndarrayJs.shape.map(function (x) {
         return new Sk.builtin.int_(x);
@@ -1085,7 +1228,7 @@ var $builtinmodule = function (name) {
             var py_shape = new Sk.builtin.tuple(self.v.shape.map(function (x) {
               return new Sk.builtin.int_(x);
             }));
-            var py_buffer = new Sk.ffi.remapToPy(self.v.buffer)
+            var py_buffer = new Sk.builtin.list(self.v.buffer);
             var ndarray_copy = Sk.misceval.callsim(mod[ CLASS_NDARRAY ], py_shape, undefined, py_buffer);
             var reversed_shape = ndarray_copy.v.shape.reverse(); // reverse the order
             return ndarray_copy;
@@ -1386,31 +1529,31 @@ var $builtinmodule = function (name) {
     .func(arange_f);
 
   /* implementation for numpy.array
-  ------------------------------------------------------------------------------------------------
-    http://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html#numpy.array
+    ------------------------------------------------------------------------------------------------
+        http://docs.scipy.org/doc/numpy/reference/generated/numpy.array.html#numpy.array
 
-    object : array_like
-    An array, any object exposing the array interface, an object whose __array__ method returns an array, or any (nested) sequence.
+        object : array_like
+        An array, any object exposing the array interface, an object whose __array__ method returns an array, or any (nested) sequence.
 
-    dtype : data-type, optional
-    The desired data-type for the array. If not given, then the type will be determined as the minimum type required to hold the objects in the sequence. This argument can only be used to ‘upcast’ the array. For downcasting, use the .astype(t) method.
+        dtype : data-type, optional
+        The desired data-type for the array. If not given, then the type will be determined as the minimum type required to hold the objects in the sequence. This argument can only be used to ‘upcast’ the array. For downcasting, use the .astype(t) method.
 
-    copy : bool, optional
-    If true (default), then the object is copied. Otherwise, a copy will only be made if __array__ returns a copy, if obj is a nested sequence, or if a copy is needed to satisfy any of the other requirements (dtype, order, etc.).
+        copy : bool, optional
+        If true (default), then the object is copied. Otherwise, a copy will only be made if __array__ returns a copy, if obj is a nested sequence, or if a copy is needed to satisfy any of the other requirements (dtype, order, etc.).
 
-    order : {‘C’, ‘F’, ‘A’}, optional
-    Specify the order of the array. If order is ‘C’ (default), then the array will be in C-contiguous order (last-index varies the fastest). If order is ‘F’, then the returned array will be in Fortran-contiguous order (first-index varies the fastest). If order is ‘A’, then the returned array may be in any order (either C-, Fortran-contiguous, or even discontiguous).
+        order : {‘C’, ‘F’, ‘A’}, optional
+        Specify the order of the array. If order is ‘C’ (default), then the array will be in C-contiguous order (last-index varies the fastest). If order is ‘F’, then the returned array will be in Fortran-contiguous order (first-index varies the fastest). If order is ‘A’, then the returned array may be in any order (either C-, Fortran-contiguous, or even discontiguous).
 
-    subok : bool, optional
-    If True, then sub-classes will be passed-through, otherwise the returned array will be forced to be a base-class array (default).
+        subok : bool, optional
+        If True, then sub-classes will be passed-through, otherwise the returned array will be forced to be a base-class array (default).
 
-    ndmin : int, optional
-    Specifies the minimum number of dimensions that the resulting array should have. Ones will be pre-pended to the shape as needed to meet this requirement.
+        ndmin : int, optional
+        Specifies the minimum number of dimensions that the resulting array should have. Ones will be pre-pended to the shape as needed to meet this requirement.
 
-    Returns :
-    out : ndarray
-    An array object satisfying the specified requirements
-  */
+        Returns :
+        out : ndarray
+        An array object satisfying the specified requirements
+    */
   // https://github.com/geometryzen/davinci-dev/blob/master/src/stdlib/numpy.js
   // https://github.com/geometryzen/davinci-dev/blob/master/src/ffh.js
   // http://docs.scipy.org/doc/numpy/reference/arrays.html
@@ -1430,7 +1573,6 @@ var $builtinmodule = function (name) {
       throw new Sk.builtin.TypeError('Parameter "ndmin" must be of type "int"');
     }
 
-    debugger;
     var py_ndarray = PyArray_FromAny(object, dtype, ndmin);
 
     return py_ndarray;
@@ -1601,18 +1743,18 @@ var $builtinmodule = function (name) {
 
     if (Sk.abstr.typeName(a) === CLASS_NDARRAY) {
       a_matrix = a.v.buffer;
-      a_matrix = a_matrix.map(function (x) {
-        return Sk.ffi.remapToJs(x);
-      });
+            a_matrix = a_matrix.map(function (x) {
+                return Sk.ffi.remapToJs(x);
+            });
     } else {
       a_matrix = Sk.ffi.remapToJs(a);
     }
 
     if (Sk.abstr.typeName(b) === CLASS_NDARRAY) {
       b_matrix = b.v.buffer;
-      b_matrix = b_matrix.map(function (x) {
-        return Sk.ffi.remapToJs(x);
-      });
+            b_matrix = b_matrix.map(function (x) {
+                return Sk.ffi.remapToJs(x);
+            });
     } else {
       b_matrix = Sk.ffi.remapToJs(b);
     }
@@ -1632,9 +1774,9 @@ var $builtinmodule = function (name) {
 
     res = np.math.multiply(a_matrix, b_matrix);
 
-    if (!Array.isArray(res)) { // if result
-      return Sk.ffi.remapToPy(res);
-    }
+        if (!Array.isArray(res)) { // if result
+            return Sk.ffi.remapToPy(res);
+        }
 
     // return ndarray
     buffer = new Sk.builtin.list(res);
@@ -1650,8 +1792,83 @@ var $builtinmodule = function (name) {
   var vdot_f = function(a, b) {
         // a and b must be array like
         // if a or b have more than 1 dim => flatten them
+        var typenum; // int
+        var ip1;
+        var ip2;
+        var op;
+        var op1 = a;
+        var op2 = b;
+        var newdimptr = -1;
+        var newdims = [-1, 1];
+        var ap1 = null;
+        var ap2 = null;
+        var ret = null;
+        var type;
+        var vdot;
 
+        typenum = PyArray_ObjectType(op1, 0);
+        typenum = PyArray_ObjectType(op2, typenum);
 
+        type = PyArray_DescrFromType(typenum);
+
+        ap1 = PyArray_FromAny(op1, type, 0, 0, 0, null);
+        if (ap1 == null) {
+            return null;
+        }
+
+        // flatten the array
+        op1 = PyArray_NewShape(ap1, newdims, 'NPY_CORDER');
+        if (op1 == null) {
+            return;
+        }
+        ap1 = op1;
+
+        ap2 = PyArray_FromAny(op2, type, 0, 0, 0, null);
+        if (ap2 == null) {
+            return null;
+        }
+
+        // flatten the array
+        op2 = PyArray_NewShape(ap2, newdims, 'NPY_CORDER');
+        if (op2 == null) {
+            return;
+        }
+        ap2 = op2;
+
+        if (PyArray_DIM(ap2, 0) != PyArray_DIM(ap1, 0)) {
+            throw new Sk.builtin.ValueError('vectors have different lengths');
+        }
+
+        var shape = new Sk.builtin.tuple([0].map(
+          function (x) {
+            return new Sk.builtin.int_(x);
+        }));
+        // create new empty array for given dimensions
+        ret = Sk.misceval.callsim(mod.zeros, shape, type);
+
+        n = PyArray_DIM(ap1, 0);
+        stride1 = PyArray_STRIDE(ap1, 0);
+        stride2 = PyArray_STRIDE(ap2, 0);
+        ip1 = PyArray_DATA(ap1);
+        ip2 = PyArray_DATA(ap2);
+        op = PyArray_DATA(ret);
+
+        switch(typenum) {
+        case 0:
+        case 1:
+        case 2:
+        case 3:
+            vdot = OBJECT_vdot;
+            break;
+        default:
+            throw new ValueError('function not available for this data type');
+        }
+
+        // call vdot function with vectors
+        vdot.call(null, ip1, stride1, ip2, stride2, op, n, null);
+
+        // return resulting ndarray
+        return PyArray_Return(ret);
   }
   mod.vdot = new Sk.builtin.func(vdot_f);
 

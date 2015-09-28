@@ -3,6 +3,28 @@
 This is a partial port of some numpy functions for skulpt. Mainly, focused on
 ```ndarray``` and its respective functions. See below for the currently supported functions.
 
+## News
+#### Latest
+- improved internal attribute handling
+- improved internal buffer handling
+- added ```ndarray.T``` attribute
+- added ```__getattr__```
+- added ```__setattr__```
+
+Example:
+```python
+import numpy as np
+
+a = np.array([[1, 2], [3, 4]])
+print(a)
+a.shape = (4,)
+print(a)
+a.shape = (1, 2, 2)
+print(a.T)
+a.shape = 4
+print(a)
+```
+
 ##Supported
 
 ###ndarray

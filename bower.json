@@ -1,6 +1,6 @@
 {
   "name": "skulpt_numpy",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "main": [ "./numpy/__init__.js", "./numpy/random/__init__.js" ],
   "description": "Partial numpy implementation for skulpt",
   "repository": {

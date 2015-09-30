@@ -558,7 +558,7 @@ var $builtinmodule = function (name) {
         if (dtype == null || Sk.builtin.checkNone(dtype)) {
             dtype = PyArray_DTypeFromObject(op, NPY_MAXDIMS);
             if (dtype == null) {
-                dtype = NPY_DEFAULT_TYPE;
+                dtype = PyArray_DescrFromType(NPY_DEFAULT_TYPE);
             }
         }
 
@@ -1381,6 +1381,7 @@ var $builtinmodule = function (name) {
       return Sk.misceval.callsim(mod[CLASS_NDARRAY], shape, undefined, buffer);
     });
 
+    // reference: https://github.com/numpy/numpy/blob/41afcc3681d250f231aea9d9f428a9e197a47f6e/numpy/core/src/multiarray/shape.c#L692
     $loc.transpose = new Sk.builtin.func(function (self, axes) {
         // http://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.transpose.html
         if (axes == null || Sk.builtin.checkNone(axes)) {

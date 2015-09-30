@@ -200,27 +200,94 @@ var $builtinmodule = function (name) {
         }
     }
 
+    function PyArray_UNPACK_ITERABLE(itObj) {
+        if (Sk.builtin.checkIterable(itObj)) {
+            var it = Sk.abstr.iter(itObj);
+            var ret = [];
+            for (it = Sk.abstr.iter(seq), i = it.tp$iternext(); i !== undefined; i = it.tp$iternext()) {
+                ret.push(i);
+            }
+            // now iterate over all objects and unpack them
+        }
+    }
+
+    function PyArray_UNPACK_SEQUENCE(seqObj) {
+        if (Sk.builtin.checkSequence(seqObj)) {
+            var length = Sk.builtin.len(seqObj);
+            length = Sk.ffi.remapToJs(length);
+            var i;
+            var ret = [];
+            var item;
+
+            for (i = 0; i < length; i++) {
+                item = seqObj.mp$subscript(i);
+                ret.push(item);
+            }
+
+            return ret;
+        } else {
+            throw new Error('Internal API-CAll error occured in PyArray_UNPACK_SEQUENCE');
+        }
+    }
+
     function PyArray_UNPACK_SHAPE(arr, shape) {
         var js_shape;
-        if (Sk.builtin.checkInt(shape)) {
+
+        if (Sk.builtin.checkNone(shape)) {
+            throw new Sk.builtin.ValueError('total size of new array must be unchanged');
+        } else if (Sk.builtin.checkInt(shape)) {
             js_shape = [Sk.ffi.remapToJs(shape)];
+        } else if (Sk.builtin.checkSequence(shape) && Sk.builtin.isinstance(shape, Sk.builtin.dict) == Sk.builtin.bool.false$) {
+            js_shape = PyArray_UNPACK_SEQUENCE(shape);
         } else {
-            js_shape = Sk.ffi.remapToJs(shape);
+            throw new Sk.builtin.TypeError('expected sequence object with len >= 0 or a single integer');
         }
 
-        // special auto shape infering
-        if (js_shape[0] === -1) {
-            if (js_shape.length === 1) {
-                js_shape[0] = PyArray_SIZE(arr);
+        // now check each array item individually
+        var i;
+        var foundUnknownDimension = 0;
+        var unknownDimensionIndex = -1;
+        for (i = 0; i < js_shape.length; i++) {
+            if (!Sk.builtin.checkInt(js_shape[i])) {
+                throw new Sk.builtin.TypeError('an integer is required');
             } else {
-                var n_size = prod(js_shape.slice(1));
-                var n_firstDim = PyArray_SIZE(arr) / n_size;
-                js_shape[0] = n_firstDim;
+                js_shape[i] = Sk.ffi.remapToJs(js_shape[i]);
+
+                if (js_shape[i] === -1) {
+                    foundUnknownDimension += 1;
+                    unknownDimensionIndex = i;
+                }
             }
         }
 
+        // check if there is one unknown dimension
+        if (foundUnknownDimension > 1) {
+            throw new Sk.builtin.ValueError('can only specify one unknown dimension');
+        }
+
+        // shape infering with one unknown dimension
+        if (foundUnknownDimension == 1) {
+            var knownDim;
+            var n_size;
+            // easy solution for first index auto shape infering
+            if (unknownDimensionIndex === 0) {
+                if (js_shape.length === 1) {
+                    n_size = 1; // arr_size / 1 is 1 dim with all elements
+                } else {
+                    n_size = prod(js_shape.slice(1));
+                }
+            } else {
+                // slice array without the -1 dim
+                var prod_shape = js_shape.slice();
+                prod_shape.splice(unknownDimensionIndex, 1); // remove unknown dim
+                n_size = prod(prod_shape);
+            }
+            knownDim = PyArray_SIZE(arr) / n_size;
+            js_shape[unknownDimensionIndex] = knownDim;
+        }
+
         if (prod(js_shape) !== PyArray_SIZE(arr)) {
-            throw new ValueError('total size of new array must be unchanged');
+            throw new Sk.builtin.ValueError('total size of new array must be unchanged');
         }
 
         return js_shape;
@@ -968,14 +1035,9 @@ var $builtinmodule = function (name) {
             switch (_name) {
                 case 'shape':
                     // trigger reshape;
-                    if (value instanceof Sk.builtin.tuple || value instanceof Sk.builtin.list || Sk.builtin.checkInt(value)) {
-                        var js_shape = PyArray_UNPACK_SHAPE(self, value);
+                    var js_shape = PyArray_UNPACK_SHAPE(self, value);
 
-                        // ToDo: shape unpacking: seq/int => tuple (js array)
-                        self.v.shape = js_shape;
-                    } else {
-                        throw new TypeError('expected sequence object with len >= 0 or a single integer');
-                    }
+                    self.v.shape = js_shape;
                     return;
             }
         }

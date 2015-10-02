@@ -2,7 +2,7 @@
  * ES6 - Math polyfill, when .dot is implemented, we do not need to rely on mathjs anymore
  * borrowed from: https://github.com/MaxArt2501/es6-math
  */
-(function (factory) {
+(function(factory) {
     if (typeof define === "function" && define.amd) {
         // AMD. Register as an anonymous module.
         define([], factory);
@@ -184,11 +184,195 @@ var $builtinmodule = function (name) {
       return res;
     };
 
+    function PyArray_Check(obj) {
+        return obj && (Sk.abstr.typeName(obj) === CLASS_NDARRAY);
+    }
+
+    /* get the dataptr from its current coordinates for simple iterator */
+    // coordinates is a array, iter is special ndarray create iter object
+    function get_ptr_simple(iter, coordinates) {
+        var i;
+        var ret;
+
+        ret = PyArray_DATA(iter.ao);
+
+        for (i = 0; i < PyArray_NDIM(iter.ao); ++i) {
+            ret += coordinates[i] * iter.strides[i];
+        }
+
+        return ret;
+    }
+
+    // common init code for ndarray iterators
+    function array_iter_base_init(it, ao) {
+        var nd, i;
+
+        nd = PyArray_NDIM(ao);
+        it.ao = ao;
+        it.size = PyArray_SIZE(ao);
+        it.nd_m1 = nd - 1;
+        it.factors = it.factors || [];
+        it.dims_m1 = it.dims_m1 || [];
+        it.strides = it.strides || [];
+        it.backstrides = it.backstrides || [];
+        it.bounds = it.bounds || [];
+        it.limits = it.limits || [];
+        it.limits_sizes = it.limits_sizes || [];
+        it.factors[nd -1] = 1;
+
+        for (i = 0; i < nd; i++) {
+            it.dims_m1[i] = PyArray_DIMS(ao)[i] - 1;
+            it.strides[i] = PyArray_STRIDES(ao)[i];
+            it.backstrides[i] = it.strides[i] * it.dims_m1[i];
+            if (i > 0) {
+                it.factors[nd-i-1] = it.factors[nd-i] * PyArray_DIMS(ao)[nd-i];
+            }
+            it.bounds[i] = it.bounds[i] || [];
+            it.bounds[i][0] = 0;
+            it.bounds[i][1] = PyArray_DIMS(ao)[i] - 1;
+            it.limits[i] = it.limits[i] || [];
+            it.limits[i][0] = 0;
+            it.limits[i][1] = PyArray_DIMS(ao)[i] - 1;
+            it.limits_sizes[i] = it.limits[i][1] - it.limits[i][0] + 1;
+        }
+
+        // assign translate a method
+        it.translate = get_ptr_simple;
+
+        debugger;
+        PyArray_ITER_RESET(it);
+
+        return it;
+    }
+
+    /*NUMPY_API
+     * Get Iterator.
+     */
+    function PyArray_IterNew(obj) {
+        var it; // PayArrayIterObject
+        var ao; // PyArrayObject
+
+        debugger;
+        if (!PyArray_Check(obj)) {
+            throw new Error('bad internal call');
+        }
+
+        ao = obj;
+        it = Sk.abstr.iter(ao); // create new iter
+
+        if (it == null) {
+            return null;
+        }
+
+        array_iter_base_init(it, ao);
+
+        return it;
+    }
+
+    /*NUMPY_API
+     * Get Iterator that iterates over all but one axis (don't use this with
+     * PyArray_ITER_GOTO1D).  The axis will be over-written if negative
+     * with the axis having the smallest stride.
+     */
+    function PyArray_IterAllButAxis(obj, inaxis) {
+        var arr;
+        var it;
+        var axis;
+        debugger;
+        if (!PyArray_Check(obj)) {
+            throw new Sk.builtin.ValueError('Numpy IterAllButAxis requires an ndarray.');
+        }
+
+        arr = obj;
+        it = PyArray_IterNew(arr);
+
+        if (PyArray_NDIM(arr) == 0) {
+            return it;
+        }
+
+        if (inaxis < 0) {
+            var i;
+            var minaxis = 0;
+            var minstride = 0;
+            i = 0;
+            while (minstride == 0 && i < PyArray_NDIM(arr)) {
+                minstride = PyArray_STRIDE(arr ,i);
+                i += 1;
+            }
+
+            for (i = 1; i < PyArray_NDIM(arr); i++) {
+                if (PyArray_STRIDE(arr, i) > 0 && PyArray_STRIDE(arr, i) < minstride) {
+                    minaxis = 1;
+                    minstride = PyArray_STRIDE(arr, i);
+                }
+            }
+            inaxis = minaxis;
+        }
+
+        axis = inaxis;
+
+        it.contiguous = 0;
+
+        if (it.size != 0) {
+            it.size /= PyArray_DIM(arr, axis);
+        }
+
+        it.dims_m1[axis] = 0;
+        it.backstrides[axis] = 0;
+
+        return it;
+    }
+
+    function _PyArray_ITER_NEXT1(it) {
+        it.dataptr =  PyArray_DATA(it.ao)[it.strides[0]];
+        it.coordinates[0] += 1;
+    }
+
+    function _PyArray_ITER_NEXT2(it) {
+        if (it.coordinates[1] < it.dims_m1[1]) {
+            it.coordinates[1] += 1;
+            it.dataptr =  PyArray_DATA(it.ao)[it.strides[1]];
+        } else {
+            it.coordinates[1] = 0;
+            it.coordinates[0] += 1;
+            it.dataptr =  PyArray_DATA(it.ao)[it.strides[0] - it.backstrides[1]];
+        }
+    }
+
+    function PyArray_ITER_NEXT(it) {
+        it.index += 1;
+        if (it.nd_m1 == 0) {
+            _PyArray_ITER_NEXT1(it)
+        } else if (it.nd_m1 == 1) {
+            _PyArray_ITER_NEXT2(it);
+        } else {
+            var __npy_i;
+            for (__npy_i = it.nd_m1; __npy_i >= 0; __npy_i--) {
+                if (it.coordinates[__npy_i] < it.dims_m1[__npy_i]) {
+                    it.coordinates[__npy_i] += 1;
+                    // _PyAIT(it)->dataptr += _PyAIT(it)->strides[__npy_i];
+                    it.dataptr = PyArray_DATA(it.ao)[it.strides[__npy_i]];
+                } else {
+                    it.coordinates[__npy_i] = 0;
+                    it.dataptr = PyArray_DATA(it.ao)[it.backstrides[__npy_i]];
+                }
+            }
+        }
+    }
+
+    // https://github.com/numpy/numpy/blob/3d2b8ca9bcbdbc9e835cb3f8d56c2d93a67b00aa/numpy/core/include/numpy/ndarraytypes.h#L1077
+    function PyArray_ITER_RESET(it) {
+        it.index = 0;
+        it.dataptr = PyArray_DATA(it.ao)[0]; // back to the first element
+        it.coordinates = [0, it.nd_m1 + 1];
+    }
+
     /*
      * This function checks to see if arr is a 0-dimensional array and, if so, returns the appropriate array scalar. It should be used whenever 0-dimensional arrays could be returned to Python.
      */
     function PyArray_Return(arr) {
-        if (arr && (Sk.abstr.typeName(arr) === CLASS_NDARRAY)) {
+        if (PyArray_Check(arr)) {
+            debugger;
             var dim = PyArray_DIM(arr, 0);
             if (dim === 0) {
                 return PyArray_DATA(arr)[0]; // return the only element
@@ -196,7 +380,7 @@ var $builtinmodule = function (name) {
                 return arr;
             }
         } else {
-            throw new Error('Internal API-Call Error occured in PyArray_NDIM.', arr);
+            throw new Error('Internal API-Call Error occured in PyArray_Return.', arr);
         }
     }
 
@@ -373,6 +557,52 @@ var $builtinmodule = function (name) {
         } else {
             throw new Error('Internal API-Call Error occured in PyArray_NDIM.', arr);
         }
+    }
+
+    // OBJECT_dot is the method used for python types
+    // https://github.com/numpy/numpy/blob/f43d691fd0b9b4f416b50fba34876691af2d0bd4/numpy/core/src/multiarray/arraytypes.c.src#L3497
+    function OBJECT_dot(ip1, is1, ip2, is2, op, n, ignore) {
+        /*
+         * ALIGNMENT NOTE: np.dot, np.inner etc. enforce that the array is
+         * BEHAVED before getting to this point, so unaligned pointers aren't
+         * handled here.
+         */
+        var i; // npy_intp
+        var tmp1; // PyObject
+        var tmp2; // PyObject
+        var tmp = null; // PyObject
+        var tmp3; // PyObject **
+
+        var ip1_i = 0;
+        var ip2_i = 0;
+
+        for (i = 0; i < n; i++, ip1_i += is1, ip2_i += is2) {
+            if (ip1[ip1_i] == null || ip2[ip2_i] == null) {
+                tmp1 = Sk.builtin.bool.false$;
+            }
+            else {
+                tmp1 = Sk.abstr.numberBinOp(ip1[ip1_i], ip2[ip2_i], 'Mult');
+                if (!tmp1) {
+                    return;
+                }
+            }
+            if (i == 0) {
+                tmp = tmp1;
+            }
+            else {
+                tmp2 = Sk.abstr.numberBinOp(tmp, tmp1, 'Add');
+                if (!tmp2) {
+                    return;
+                }
+                tmp = tmp2;
+            }
+        }
+
+        tmp3 = op;
+        tmp2 = tmp3;
+        //op[0] = tmp;
+
+        return tmp;
     }
 
     // vdot function for python basic numeric types
@@ -682,9 +912,11 @@ var $builtinmodule = function (name) {
     /*NUMPY_API
      * Numeric.matrixproduct2(a,v,out)
      * just like inner product but does the swapaxes stuff on the fly
-     * https://github.com/numpy/numpy/blob/d033b6e19fc95a1f1fd6592de8318178368011b1/numpy/core/src/multiarray/methods.c#L2037
+     * array_dot: https://github.com/numpy/numpy/blob/d033b6e19fc95a1f1fd6592de8318178368011b1/numpy/core/src/multiarray/methods.c#L2037
+     *
+     * MatrixProduct2: https://github.com/numpy/numpy/blob/f43d691fd0b9b4f416b50fba34876691af2d0bd4/numpy/core/src/multiarray/multiarraymodule.c#L950
      */
-    function MatrixProdcut(op1, op2, out) {
+    function MatrixProdcut2(op1, op2, out) {
         var ap1; // PyArrayObject
         var ap2; // PyArrayObject
         var ret = null; // PyArrayObject
@@ -763,18 +995,58 @@ var $builtinmodule = function (name) {
         //ret = new_array_for_sum(ap1, ap2, out, nd, dimensions, typenum);
 
         // create new empty array for given dimensions
-        ret = Sk.misceval.callsim(mod.zeros, dimensions, typec);
+        var _shape = new Sk.builtin.tuple(dimensions.map(function(x) {
+            return new Sk.builtin.int_(x);
+        }));
+        ret = Sk.misceval.callsim(mod.zeros, _shape, typec);
 
-        // ToDo: check if both types allow dot multiplication
+        // Hint: the switch case function replaces the following lines
         //dot = PyArray_DESCR(ret)->f->dotfunc;
         //if (dot == NULL) {
         //    PyErr_SetString(PyExc_ValueError,
         //                    "dot not available for this type");
         //    goto fail;
         //}
+        switch (typenum) {
+        case 0:
+        case 1:
+        case 2:
+        case 3:
+            dot = OBJECT_dot;
+            break;
+        default:
+            throw new Sk.builtin.ValueError('dot not available for this type');
+        }
 
+        op = PyArray_DATA(ret);
+        // os = PyArray_DESCR(ret).elsize; // we do not have element sizes in JavaScript
+        os = 1; // we just deal with normal indicis
 
-        return null;
+        axis = PyArray_NDIM(ap1) - 1;
+        it1 = PyArray_IterAllButAxis(ap1, axis);
+
+        if (it1 == null) {
+            return null;
+        }
+
+        it2 = PyArray_IterAllButAxis(ap2, matchDim);
+
+        if (it2 == null) {
+            return null;
+        }
+
+        var op_i = 0;
+        while (it1.index < it1.size) {
+            while (it2.index < it2.size) {
+                op[op_i] = dot(it1.dataptr, is1, it2.dataptr, is2, null, l, ret);
+                op_i += os;
+                PyArray_ITER_NEXT(it2);
+            }
+            PyArray_ITER_NEXT(it1);
+            PyArray_ITER_RESET(it2);
+        }
+
+        return ret;
     }
 
   var np = new numpy();
@@ -1942,72 +2214,28 @@ var $builtinmodule = function (name) {
   /**
     Dot product
   **/
-  var dot_f = function (a, b) {
-    Sk.builtin.pyCheckArgs("dot", arguments, 2, 2);
+  var dot_f = function (a, b, o) {
+    Sk.builtin.pyCheckArgs("dot", arguments, 2, 3);
 
-    // ToDo: add support for ndarray args
+    var o;
+    var ret;
 
-    if (!(a instanceof Sk.builtin.list) && !Sk.builtin.checkNumber(
-      a) && (Sk.abstr.typeName(a) !== CLASS_NDARRAY)) {
-      throw new Sk.builtin.TypeError("'" + Sk.abstr.typeName(a) +
-        "' is not supported for a.");
+    if (Sk.builtin.checkNone(o)) {
+        o = null;
     }
 
-    if (!(b instanceof Sk.builtin.list) && !Sk.builtin.checkNumber(
-      b) && (Sk.abstr.typeName(b) !== CLASS_NDARRAY)) {
-      throw new Sk.builtin.TypeError("'" + Sk.abstr.typeName(b) +
-        "' is not supported for b.");
+    if (o != null && !PyArray_Check(o)) {
+        throw new Sk.builtin.TypeError("'out' must be an array");
     }
 
-    var res;
+    ret = MatrixProdcut2(a, b, o);
 
-    var b_matrix;
-    var a_matrix;
-
-    if (Sk.abstr.typeName(a) === CLASS_NDARRAY) {
-      a_matrix = a.v.buffer;
-            a_matrix = a_matrix.map(function (x) {
-                return Sk.ffi.remapToJs(x);
-            });
-    } else {
-      a_matrix = Sk.ffi.remapToJs(a);
-    }
-
-    if (Sk.abstr.typeName(b) === CLASS_NDARRAY) {
-      b_matrix = b.v.buffer;
-            b_matrix = b_matrix.map(function (x) {
-                return Sk.ffi.remapToJs(x);
-            });
-    } else {
-      b_matrix = Sk.ffi.remapToJs(b);
-    }
-
-    var a_size = np.math.size(a_matrix);
-    var b_size = np.math.size(b_matrix);
-
-    // check for correct dimensions
-
-    if (a_size.length >= 1 && b_size.length > 1) {
-      if (a_size[a_size.length - 1] != b_size[b_size - 2]) {
-        throw new Sk.builtin.ValueError(
-          "The last dimension of a is not the same size as the second-to-last dimension of b."
-        );
-      }
-    }
-
-    res = np.math.multiply(a_matrix, b_matrix);
-
-        if (!Array.isArray(res)) { // if result
-            return Sk.ffi.remapToPy(res);
-        }
-
-    // return ndarray
-    buffer = new Sk.builtin.list(res);
-    return Sk.misceval.callsim(mod.array, buffer, Sk.builtin.float_);
+    debugger;
+    return PyArray_Return(ret);
   };
-  dot_f.co_varnames = ['a', 'b'];
+  dot_f.co_varnames = ['a', 'b', 'out'];
   dot_f.$defaults = [Sk.builtin.none.none$,
-    Sk.builtin.none.none$
+    Sk.builtin.none.none$, Sk.builtin.none.none$
   ];
   mod.dot = new Sk.builtin.func(dot_f);
 

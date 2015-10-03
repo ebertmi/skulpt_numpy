@@ -239,7 +239,6 @@ var $builtinmodule = function (name) {
         // assign translate a method
         it.translate = get_ptr_simple;
 
-        debugger;
         PyArray_ITER_RESET(it);
 
         return it;
@@ -252,7 +251,6 @@ var $builtinmodule = function (name) {
         var it; // PayArrayIterObject
         var ao; // PyArrayObject
 
-        debugger;
         if (!PyArray_Check(obj)) {
             throw new Error('bad internal call');
         }
@@ -367,20 +365,48 @@ var $builtinmodule = function (name) {
         it.coordinates = [0, it.nd_m1 + 1];
     }
 
+    // easy and functional impl. for our own use cases
+    // may not support all cases of the real API
+    function PyArray_DESCR(arr) {
+        return arr.v.dtype;
+    }
+
+    /* Does nothing with descr (cannot be NULL) */
+    /*NUMPY_API
+      Get scalar-equivalent to a region of memory described by a descriptor.
+    */
+    function PyArray_Scalar(data, descr, base) {
+        // we do not reproduce the real function, we just want to return
+        // the first and only element of the internal buffer (we do not have C like memory)
+
+        // maybe we can add later on a real impl.
+        var tmp = data[0];
+        var ret = descr(tmp);
+        return ret;
+    }
+
+    function PyArray_ToScalar(data, arr) {
+        return PyArray_Scalar(data, PyArray_DESCR(arr), arr);
+    }
+
     /*
      * This function checks to see if arr is a 0-dimensional array and, if so, returns the appropriate array scalar. It should be used whenever 0-dimensional arrays could be returned to Python.
      */
-    function PyArray_Return(arr) {
-        if (PyArray_Check(arr)) {
-            debugger;
-            var dim = PyArray_DIM(arr, 0);
-            if (dim === 0) {
-                return PyArray_DATA(arr)[0]; // return the only element
-            } else {
-                return arr;
-            }
+    function PyArray_Return(mp) {
+        debugger;
+        if (mp == null) {
+            return null;
+        }
+
+        if (!PyArray_Check(mp)) {
+            return mp;
+        }
+
+        if (PyArray_NDIM(mp) == 0) {
+            var ret = PyArray_ToScalar(PyArray_DATA(mp), mp);
+            return ret; // return the only element
         } else {
-            throw new Error('Internal API-Call Error occured in PyArray_Return.', arr);
+            return mp;
         }
     }
 
@@ -478,35 +504,35 @@ var $builtinmodule = function (name) {
     }
 
     function PyArray_SIZE(arr) {
-        if (arr && (Sk.abstr.typeName(arr) === CLASS_NDARRAY)) {
+        if (PyArray_Check(arr)) {
             return prod(arr.v.shape);
         } else {
-            throw new Error('Internal API-Call Error occured in PyArray_NDIM.', arr);
+            throw new Error('Internal API-Call Error occured in PyArray_DATA.', arr);
         }
     }
 
     function PyArray_DATA(arr) {
-        if (arr && (Sk.abstr.typeName(arr) === CLASS_NDARRAY)) {
+        if (PyArray_Check(arr)) {
             return arr.v.buffer;
         } else {
-            throw new Error('Internal API-Call Error occured in PyArray_NDIM.', arr);
+            throw new Error('Internal API-Call Error occured in PyArray_DATA.', arr);
         }
     }
 
     function PyArray_STRIDES(arr) {
-        if (arr && (Sk.abstr.typeName(arr) === CLASS_NDARRAY)) {
+        if (PyArray_Check(arr)) {
             return computeStrides(arr.v.shape);
         } else {
-            throw new Error('Internal API-Call Error occured in PyArray_NDIM.', arr);
+            throw new Error('Internal API-Call Error occured in PyArray_STRIDES.', arr);
         }
     }
 
     function PyArray_STRIDE(arr, n) {
-        if (arr && (Sk.abstr.typeName(arr) === CLASS_NDARRAY)) {
+        if (PyArray_Check(arr)) {
             var strides = computeStrides(arr.v.shape);
             return strides[n];
         } else {
-            throw new Error('Internal API-Call Error occured in PyArray_NDIM.', arr);
+            throw new Error('Internal API-Call Error occured in PyArray_STRIDE.', arr);
         }
     }
 
@@ -515,7 +541,7 @@ var $builtinmodule = function (name) {
      *  Returns a javascript value
      */
     function PyArray_NDIM(arr) {
-        if (arr && (Sk.abstr.typeName(arr) === CLASS_NDARRAY)) {
+        if (PyArray_Check(arr)) {
             return arr.v.shape.length;
         } else {
             throw new Error('Internal API-Call Error occured in PyArray_NDIM.', arr);
@@ -527,10 +553,10 @@ var $builtinmodule = function (name) {
      *  This returns javascript values!
      */
     function PyArray_DIMS(arr) {
-        if (arr && (Sk.abstr.typeName(arr) === CLASS_NDARRAY)) {
+        if (PyArray_Check(arr)) {
             return arr.v.shape;
         } else {
-            throw new Error('Internal API-Call Error occured in PyArray_NDIM.', arr);
+            throw new Error('Internal API-Call Error occured in PyArray_DIMS.', arr);
         }
     }
 
@@ -538,15 +564,15 @@ var $builtinmodule = function (name) {
      *  Return the shape in the nth dimension.
      */
     function PyArray_DIM(arr, n) {
-        if (arr && (Sk.abstr.typeName(arr) === CLASS_NDARRAY)) {
+        if (PyArray_Check(arr)) {
             return arr.v.shape[n];
         } else {
-            throw new Error('Internal API-Call Error occured in PyArray_NDIM.', arr);
+            throw new Error('Internal API-Call Error occured in PyArray_DIM.', arr);
         }
     }
 
     function PyArray_NewShape(arr, shape, order) {
-        if (arr && (Sk.abstr.typeName(arr) === CLASS_NDARRAY)) {
+        if (PyArray_Check(arr)) {
             var py_shape = new Sk.builtin.tuple(shape.map(
               function (x) {
                 return new Sk.builtin.int_(x);
@@ -555,7 +581,7 @@ var $builtinmodule = function (name) {
              var py_order = Sk.ffi.remapToPy(order);
             return Sk.misceval.callsim(arr.reshape, arr, py_shape, py_order);
         } else {
-            throw new Error('Internal API-Call Error occured in PyArray_NDIM.', arr);
+            throw new Error('Internal API-Call Error occured in PyArray_NewShape.', arr);
         }
     }
 
@@ -864,7 +890,7 @@ var $builtinmodule = function (name) {
         state.level = 0;
         state.shape = [];
 
-        if (Sk.abstr.typeName(op) == CLASS_NDARRAY) {
+        if (PyArray_Check(op)) {
             elements = PyArray_DATA(op);
             state = {};
             state.level = 0;
@@ -934,7 +960,7 @@ var $builtinmodule = function (name) {
         var dimensions = new Array(); // npy_intp dimensions[NPY_MAXDIMS];
         var dot; // PyArrray_DotFunc *dot
         var typec = null; // PyArray_Descr *typec = NULL;
-
+        debugger;
         // make new pyarray object types from ops
         typenum = PyArray_ObjectType(op1, 0);
         typenum = PyArray_ObjectType(op2, typenum);
@@ -954,9 +980,9 @@ var $builtinmodule = function (name) {
         // check dimensions
 
         // handle 0 dim cases
-        if (PyArray_NDIM(ap1) == 0 || PyArray_DIM(ap2) == 0) {
+        if (PyArray_NDIM(ap1) == 0 || PyArray_NDIM(ap2) == 0) {
             ret = PyArray_NDIM(ap1) == 0 ? ap1 : ap2;
-            ret = ret.nb$multiply(ap1, ap2);
+            ret = ret.nb$multiply.call(ap1, ap2);
 
             return ret;
         }
@@ -1165,11 +1191,7 @@ var $builtinmodule = function (name) {
           str += "[";
           idxLevel += 1;
         } else {
-          if (dtype === Sk.builtin.float_)
-            str += Sk.ffi.remapToJs(Sk.builtin.str(new Sk.builtin.float_(buffer[
-              i++])));
-          else
-            str += Sk.ffi.remapToJs(Sk.builtin.str(buffer[i++]));
+          str += Sk.ffi.remapToJs(Sk.builtin.str(buffer[i++]));
           emits[idxLevel] += 1;
         }
       } else {
@@ -1334,27 +1356,26 @@ var $builtinmodule = function (name) {
 
     $loc.reshape = new Sk.builtin.func(function (self, shape, order) {
         Sk.builtin.pyCheckArgs("reshape", arguments, 2, 3);
-        var ndarrayJs = Sk.ffi.remapToJs(self);
         // if the first dim is -1, then the size in infered from the size
         // and the other dimensions
         var js_shape = PyArray_UNPACK_SHAPE(self, shape);
 
         // create python object for shape
         var py_shape = Sk.ffi.remapToPy(js_shape);
-        return Sk.misceval.callsim(mod[CLASS_NDARRAY], py_shape, ndarrayJs.dtype,
-        new Sk.builtin.list(ndarrayJs.buffer));
+        return Sk.misceval.callsim(mod[CLASS_NDARRAY], py_shape, PyArray_DESCR(self),
+        new Sk.builtin.list(PyArray_DATA(self)));
     });
 
     $loc.copy = new Sk.builtin.func(function (self, order) {
       Sk.builtin.pyCheckArgs("copy", arguments, 1, 2);
       var ndarrayJs = Sk.ffi.remapToJs(self);
-      var buffer = ndarrayJs.buffer.map(function (x) {
+      var buffer = PyArray_DATA(self).map(function (x) {
         return x;
       });
-      var shape = new Sk.builtin.tuplePy(ndarrayJs.shape.map(function (x) {
+      var shape = new Sk.builtin.tuplePy(PyArray_DIMS(self).map(function (x) {
         return new Sk.builtin.int_(x);
       }));
-      return Sk.misceval.callsim(mod[CLASS_NDARRAY], shape, ndarrayJs.dtype,
+      return Sk.misceval.callsim(mod[CLASS_NDARRAY], shape, PyArray_DESCR(self),
         new Sk.builtin.list(buffer));
     });
 
@@ -1578,6 +1599,7 @@ var $builtinmodule = function (name) {
         $obj: ndarrayJs,
         $index: 0,
         tp$iternext: function () {
+          // ToDo: should we rise here the IterationStop Exception?
           if (ret.$index >= ret.$obj.buffer.length) return undefined;
           return ret.$obj.buffer[ret.$index++];
         }
@@ -1602,6 +1624,7 @@ var $builtinmodule = function (name) {
     **/
     function makeNumericBinaryOpLhs(operation) {
       return function (self, other) {
+        debugger;
         var lhs;
         var rhs;
         var buffer; // external
@@ -1609,20 +1632,16 @@ var $builtinmodule = function (name) {
         var shape; // new shape of returned ndarray
         var i;
 
-
-        var ndarrayJs = Sk.ffi.remapToJs(self);
-
-        if (Sk.abstr.typeName(other) === CLASS_NDARRAY) {
-          lhs = ndarrayJs.buffer;
-          rhs = Sk.ffi.remapToJs(other)
-            .buffer;
+        if (PyArray_Check(other)) {
+          lhs = PyArray_DATA(self);
+          rhs = PyArray_DATA(other);
           _buffer = [];
           for (i = 0, len = lhs.length; i < len; i++) {
             //_buffer[i] = operation(lhs[i], rhs[i]);
             _buffer[i] = Sk.abstr.binary_op_(lhs[i], rhs[i], operation);
           }
         } else {
-          lhs = ndarrayJs.buffer;
+          lhs = PyArray_DATA(self);
           _buffer = [];
           for (i = 0, len = lhs.length; i < len; i++) {
             _buffer[i] = Sk.abstr.numberBinOp(lhs[i], other, operation);
@@ -1630,28 +1649,27 @@ var $builtinmodule = function (name) {
         }
 
         // create return ndarray
-        shape = new Sk.builtin.tuple(ndarrayJs.shape.map(function (x) {
+        shape = new Sk.builtin.tuple(PyArray_DIMS(self).map(function (x) {
           return new Sk.builtin.int_(x);
         }));
         buffer = new Sk.builtin.list(_buffer);
-        return Sk.misceval.callsim(mod[CLASS_NDARRAY], shape, undefined,
+        return Sk.misceval.callsim(mod[CLASS_NDARRAY], shape, PyArray_DESCR(self),
           buffer);
       };
     }
 
     function makeNumericBinaryOpRhs(operation) {
       return function (self, other) {
-        var ndarrayJs = Sk.ffi.remapToJs(self);
-        var rhsBuffer = ndarrayJs.buffer;
+        var rhsBuffer = PyArray_DATA(self);
         var _buffer = [];
         for (var i = 0, len = rhsBuffer.length; i < len; i++) {
           _buffer[i] = Sk.abstr.numberBinOp(other, rhsBuffer[i], operation);
         }
-        var shape = new Sk.builtin.tuple(ndarrayJs.shape.map(function (x) {
+        var shape = new Sk.builtin.tuple(PyArray_DIMS(self).map(function (x) {
           return new Sk.builtin.int_(x);
         }));
         buffer = new Sk.builtin.list(_buffer);
-        return Sk.misceval.callsim(mod[CLASS_NDARRAY], shape, undefined, buffer);
+        return Sk.misceval.callsim(mod[CLASS_NDARRAY], shape, PyArray_DESCR(self), buffer);
       };
     }
 
@@ -1660,15 +1678,14 @@ var $builtinmodule = function (name) {
     */
     function makeUnaryOp(operation) {
       return function (self) {
-        var ndarrayJs = Sk.ffi.remapToJs(self);
-        var _buffer = ndarrayJs.buffer.map(function (value) {
+        var _buffer =PyArray_DATA(self).map(function (value) {
           return Sk.abstr.numberUnaryOp(value, operation);
         });
-        var shape = new Sk.builtin.tuple(ndarrayJs.shape.map(function (x) {
+        var shape = new Sk.builtin.tuple(PyArray_DIMS(self).map(function (x) {
           return new Sk.builtin.int_(x);
         }));
         buffer = new Sk.builtin.list(_buffer);
-        return Sk.misceval.callsim(mod[CLASS_NDARRAY], shape, undefined, buffer);
+        return Sk.misceval.callsim(mod[CLASS_NDARRAY], shape, PyArray_DESCR(self), buffer);
       };
     }
 
@@ -1704,15 +1721,14 @@ var $builtinmodule = function (name) {
     **/
     $loc.__pow__ = new Sk.builtin.func(function (self, other) {
       Sk.builtin.pyCheckArgs("__pow__", arguments, 2, 2);
-      var ndarrayJs = Sk.ffi.remapToJs(self);
-      var _buffer = ndarrayJs.buffer.map(function (value) {
+      var _buffer = PyArray_DATA(self).map(function (value) {
         return Sk.builtin.pow(value, other);
       });
-      var shape = new Sk.builtin.tuple(ndarrayJs.shape.map(function (x) {
+      var shape = new Sk.builtin.tuple(PyArray_DIMS(self).map(function (x) {
         return new Sk.builtin.int_(x);
       }));
       buffer = new Sk.builtin.list(_buffer);
-      return Sk.misceval.callsim(mod[CLASS_NDARRAY], shape, undefined, buffer);
+      return Sk.misceval.callsim(mod[CLASS_NDARRAY], shape, PyArray_DESCR(self), buffer);
     });
 
     // reference: https://github.com/numpy/numpy/blob/41afcc3681d250f231aea9d9f428a9e197a47f6e/numpy/core/src/multiarray/shape.c#L692
@@ -1723,8 +1739,8 @@ var $builtinmodule = function (name) {
             var py_shape = new Sk.builtin.tuple(self.v.shape.map(function (x) {
               return new Sk.builtin.int_(x);
             }));
-            var py_buffer = new Sk.builtin.list(self.v.buffer);
-            var ndarray_copy = Sk.misceval.callsim(mod[ CLASS_NDARRAY ], py_shape, undefined, py_buffer);
+            var py_buffer = new Sk.builtin.list(PyArray_DATA(self));
+            var ndarray_copy = Sk.misceval.callsim(mod[ CLASS_NDARRAY ], py_shape, PyArray_DESCR(self), py_buffer);
             var reversed_shape = ndarray_copy.v.shape.reverse(); // reverse the order
             return ndarray_copy;
         } else {
@@ -1750,25 +1766,25 @@ var $builtinmodule = function (name) {
   function callTrigonometricFunc(x, op) {
     var res;
     var num;
+
+    // ToDo: check if we can use ArrayFromAny here!
     if (x instanceof Sk.builtin.list || x instanceof Sk.builtin.tuple) {
       x = Sk.misceval.callsim(mod.array, x);
     }
 
-    if (Sk.abstr.typeName(x) === CLASS_NDARRAY) {
-      var ndarrayJs = Sk.ffi.remapToJs(x);
-
-      var _buffer = ndarrayJs.buffer.map(function (value) {
+    if (PyArray_Check(x)) {
+      var _buffer = PyArray_DATA(x).map(function (value) {
         num = Sk.builtin.asnum$(value);
         res = op.call(null, num);
         return new Sk.builtin.float_(res);
       });
 
-      var shape = new Sk.builtin.tuple(ndarrayJs.shape.map(function (x) {
-        return new Sk.builtin.int_(x);
+      var shape = new Sk.builtin.tuple(PyArray_DIMS(x).map(function (d) {
+        return new Sk.builtin.int_(d);
       }));
 
       buffer = new Sk.builtin.list(_buffer);
-      return Sk.misceval.callsim(mod[CLASS_NDARRAY], shape, undefined, buffer);
+      return Sk.misceval.callsim(mod[CLASS_NDARRAY], shape, PyArray_DESCR(x), buffer);
     } else if (Sk.builtin.checkNumber(x)) {
       num = Sk.builtin.asnum$(x);
       res = op.call(null, num);
@@ -2230,7 +2246,6 @@ var $builtinmodule = function (name) {
 
     ret = MatrixProdcut2(a, b, o);
 
-    debugger;
     return PyArray_Return(ret);
   };
   dot_f.co_varnames = ['a', 'b', 'out'];

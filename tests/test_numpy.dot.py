@@ -1,5 +1,8 @@
 import numpy as np
 
+c = np.dot(3, 4)
+print(c)
+
 c = np.dot([2j, 3j], [2j, 3j])
 print(c)
 

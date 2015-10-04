@@ -157,7 +157,84 @@ var $builtinmodule = function (name) {
     **/
     /* eslint-disable */
 
+    /******************************************/
+    /*               DEFINES                  */
+    /******************************************/
+
+    // base class name, used for all checks and other defines
+    var CLASS_NDARRAY = "numpy.ndarray";
+
+    // numpy specific defines and constants
+    var NPY_MAX_INT = Number.MAX_SAFE_INTEGER;
+    var NPY_MAX_INTP = NPY_MAX_INT;
     var NPY_MAXDIMS = 32;
+    var NPY_MAXARGS = 32;
+
+    var NPY_FAIL = 0;
+    var NPY_SUCCEED = 1;
+
+    var NPY_TYPES = { 
+        NPY_BOOL: 0,
+        NPY_BYTE: 1, 
+        NPY_UBYTE: 2,
+        NPY_SHORT: 3, 
+        NPY_USHORT: 4,
+        NPY_INT: 5, 
+        NPY_UINT: 6,
+        NPY_LONG: 7, 
+        NPY_ULONG: 8,
+        NPY_LONGLONG: 9, 
+        NPY_ULONGLONG: 10,
+        NPY_FLOAT: 11, 
+        NPY_DOUBLE: 12, 
+        NPY_LONGDOUBLE: 13,
+        NPY_CFLOAT: 14, 
+        NPY_CDOUBLE: 15, 
+        NPY_CLONGDOUBLE: 16,
+        NPY_OBJECT: 17,
+        NPY_STRING: 18, 
+        NPY_UNICODE: 19,
+        NPY_VOID: 20,
+        /*
+         * New 1.6 types appended, may be integrated
+         * into the above in 2.0.
+         */
+        NPY_DATETIME: 21, 
+        NPY_TIMEDELTA: 22, 
+        NPY_HALF: 23,
+
+        NPY_NTYPES: 24,
+        NPY_NOTYPE: 25,
+        NPY_CHAR: 26,      /* special flag */
+        NPY_USERDEF: 256,  /* leave room for characters */
+
+        /* The number of types not including the new 1.6 types */
+        NPY_NTYPES_ABI_COMPATIBLE: 21
+    };
+
+    /* basetype array priority */
+    var NPY_PRIORITY = 0.0;
+
+    /* default subtype priority */
+    var NPY_SUBTYPE_PRIORITY = 1.0;
+
+    /* default scalar priority */
+    var NPY_SCALAR_PRIORITY = -1000000.0;
+    
+    // number of floating point types
+    var NPY_NUM_FLOATTYPE = 3;
+
+    // array falgs
+    var NPY_ARRAY_C_CONTIGUOUS = 0x0001;
+    var NPY_ARRAY_F_CONTIGUOUS = 0x0002;
+    var NPY_ARRAY_OWNDATA = 0x0004;
+    var NPY_ARRAY_ALIGNED = 0x0100;
+    var NPY_ARRAY_NOTSWAPPED = 0x0200;
+    var NPY_ARRAY_WRITEABLE  = 0x0400;
+    var NPY_ARRAY_BEHAVED = (NPY_ARRAY_ALIGNED | NPY_ARRAY_WRITEABLE);
+    var NPY_ARRAY_CARRAY = NPY_ARRAY_C_CONTIGUOUS | NPY_ARRAY_BEHAVED;
+    var NPY_ARRAY_DEFAULT = NPY_ARRAY_CARRAY;
+    var NPY_ARRAY_UPDATEIFCOPY = 0x1000;
 
     var numpy = function () {
       if (typeof mathjs == 'function') {
@@ -184,6 +261,7 @@ var $builtinmodule = function (name) {
       return res;
     };
 
+    // check if obj is an ndarray (does not check for subclasses)
     function PyArray_Check(obj) {
         return obj && (Sk.abstr.typeName(obj) === CLASS_NDARRAY);
     }
@@ -204,6 +282,7 @@ var $builtinmodule = function (name) {
     }
 
     // common init code for ndarray iterators
+    // it.dataptr is just the index to the current element (as we do not have C pointers in Javascript)
     function array_iter_base_init(it, ao) {
         var nd, i;
 
@@ -276,7 +355,7 @@ var $builtinmodule = function (name) {
         var arr;
         var it;
         var axis;
-        debugger;
+
         if (!PyArray_Check(obj)) {
             throw new Sk.builtin.ValueError('Numpy IterAllButAxis requires an ndarray.');
         }
@@ -321,22 +400,25 @@ var $builtinmodule = function (name) {
         return it;
     }
 
+    // it.dataptr is just the index to the current element (as we do not have C pointers in Javascript)
     function _PyArray_ITER_NEXT1(it) {
-        it.dataptr =  PyArray_DATA(it.ao)[it.strides[0]];
+        it.dataptr =  it.strides[0];
         it.coordinates[0] += 1;
     }
 
+    // it.dataptr is just the index to the current element (as we do not have C pointers in Javascript)
     function _PyArray_ITER_NEXT2(it) {
         if (it.coordinates[1] < it.dims_m1[1]) {
             it.coordinates[1] += 1;
-            it.dataptr =  PyArray_DATA(it.ao)[it.strides[1]];
+            it.dataptr =  it.strides[1];
         } else {
             it.coordinates[1] = 0;
             it.coordinates[0] += 1;
-            it.dataptr =  PyArray_DATA(it.ao)[it.strides[0] - it.backstrides[1]];
+            it.dataptr =  it.strides[0] - it.backstrides[1];
         }
     }
 
+    // it.dataptr is just the index to the current element (as we do not have C pointers in Javascript)
     function PyArray_ITER_NEXT(it) {
         it.index += 1;
         if (it.nd_m1 == 0) {
@@ -349,19 +431,20 @@ var $builtinmodule = function (name) {
                 if (it.coordinates[__npy_i] < it.dims_m1[__npy_i]) {
                     it.coordinates[__npy_i] += 1;
                     // _PyAIT(it)->dataptr += _PyAIT(it)->strides[__npy_i];
-                    it.dataptr = PyArray_DATA(it.ao)[it.strides[__npy_i]];
+                    it.dataptr = it.strides[__npy_i];
                 } else {
                     it.coordinates[__npy_i] = 0;
-                    it.dataptr = PyArray_DATA(it.ao)[it.backstrides[__npy_i]];
+                    it.dataptr = it.backstrides[__npy_i];
                 }
             }
         }
     }
 
     // https://github.com/numpy/numpy/blob/3d2b8ca9bcbdbc9e835cb3f8d56c2d93a67b00aa/numpy/core/include/numpy/ndarraytypes.h#L1077
+    // it.dataptr is just the index to the current element (as we do not have C pointers in Javascript)
     function PyArray_ITER_RESET(it) {
         it.index = 0;
-        it.dataptr = PyArray_DATA(it.ao)[0]; // back to the first element
+        it.dataptr = 0; // back to the first element
         it.coordinates = [0, it.nd_m1 + 1];
     }
 
@@ -393,7 +476,6 @@ var $builtinmodule = function (name) {
      * This function checks to see if arr is a 0-dimensional array and, if so, returns the appropriate array scalar. It should be used whenever 0-dimensional arrays could be returned to Python.
      */
     function PyArray_Return(mp) {
-        debugger;
         if (mp == null) {
             return null;
         }
@@ -601,7 +683,7 @@ var $builtinmodule = function (name) {
 
         var ip1_i = 0;
         var ip2_i = 0;
-
+        debugger;
         for (i = 0; i < n; i++, ip1_i += is1, ip2_i += is2) {
             if (ip1[ip1_i] == null || ip2[ip2_i] == null) {
                 tmp1 = Sk.builtin.bool.false$;
@@ -735,6 +817,7 @@ var $builtinmodule = function (name) {
             maxdims = NPY_MAXDIMS;
         }
 
+        var element;
         // simple type
         if (Sk.builtin.checkNumber(obj)) {
             element = obj;
@@ -745,7 +828,7 @@ var $builtinmodule = function (name) {
             // array
             var length = Sk.builtin.len(obj);
             if (Sk.builtin.asnum$(length) > 0) {
-                var element = PyArray_DATA(obj)[0];
+                element = PyArray_DATA(obj)[0];
             } else {
                 // get dtype from ndarray
                 return obj.v.dtype;
@@ -767,6 +850,7 @@ var $builtinmodule = function (name) {
 
     // our basic internal hierarchy for types
     // we can only promote from lower to higher numbers
+    // ToDo: use numpy enum for types
     var Internal_TypeTable = {
         'complex': 3,
         'complex_': 3,
@@ -790,6 +874,14 @@ var $builtinmodule = function (name) {
         }
 
         return num;
+    }
+
+    // ToDo: check if we can change this to match the real impl.
+    function PyArray_TYPE(arr) {
+        // return ((PyArrayObject_fields *)arr)->descr->type_num;
+        var descr = PyArray_DESCR(arr);
+        var typenum = Internal_DType_To_Num(descr);
+        return typenum;
     }
 
     /**
@@ -862,6 +954,259 @@ var $builtinmodule = function (name) {
         } else {
             return Sk.misceval.callsim(dtype, obj);
         }
+    }
+
+    // ToDo: how can we make a exact check?
+    // or do we need to refactor PyArray_Check for subclasses?
+    function PyArray_CheckExact(obj) {
+        return PyArray_Check(obj);
+    }
+
+    function PyArray_CheckAnyScalarExact(obj) {
+
+    }
+
+    function PyArray_GetPriority(obj, default_) {
+        var ret;
+        var priority = NPY_PRIORITY;
+
+        if (PyArray_CheckExact(obj)) {
+            return priority;
+        } else if (PyArray_CheckAnyScalarExact(obj)) {
+            return NPY_SCALAR_PRIORITY;
+        }
+
+        ret = Sk.builtin.getattr(obj, new Sk.builtin.str('__array_priority__'), Sk.builtin.none.none$);
+        if (Sk.builtin.checkNone(ret)) {
+            return default_;
+        }
+
+        ret = Sk.builtin.float(ret);
+        priority = Sk.ffi.remapToJs(ret);
+
+        return priority;
+    }
+
+    // https://github.com/numpy/numpy/blob/5d6a9f0030e8d1a63e43783c2b5b54cde93bc5d0/numpy/core/src/multiarray/ctors.c#L903
+    function PyArray_NewFromDescr_int(subtype, descr, nd, dims, strides, data, flags, obj, zeroed) {
+        var fa;
+        var i;
+        var sd;
+        var size;
+
+        if (descr.subarray) {
+            throw new Error('subarrays not supported');
+        }
+
+        if (nd > NPY_MAXDIMS) {
+            throw new Sk.builtin.ValueError('number of dimensions must be within [0, ' + NPY_MAXDIMS + ']');
+        }
+
+        /* check dimensions */
+        size = 1;
+        sd = 1; // we do not have any element sizes: sd = (size_t) descr->elsize;
+        if (sd == 0) {
+            // ToDo: https://github.com/numpy/numpy/blob/5d6a9f0030e8d1a63e43783c2b5b54cde93bc5d0/numpy/core/src/multiarray/ctors.c#L940
+            throw new Sk.builtin.TypeError('Empty data-type');
+        }
+
+        for (i = 0; i < nd; i++) {
+            var dim = dims[i];
+
+            if (dim == null) {
+                continue;
+            }
+
+            if (dim < 0) {
+                throw new Sk.builtin.ValueError('negative dimensions are not allowed');
+            }
+
+            // calculate size of array
+            // https://github.com/numpy/numpy/blob/5d6a9f0030e8d1a63e43783c2b5b54cde93bc5d0/numpy/core/src/multiarray/ctors.c#L982
+            size = dim * size;
+            if (size == Number.MAX_VALUE) {
+                throw new Sk.builtin.ValueError('array is too big.');
+            }
+        }
+
+        fa = {}; //  fa = (PyArrayObject_fields *) subtype->tp_alloc(subtype, 0);
+
+        fa.nd = nd;
+        fa.dimensions = null;
+        fa.data = null;
+
+        if (data == null) {
+            fa.flags = NPY_ARRAY_DEFAULT;
+            if (flags) {
+                /*
+                // ToDo: currently skulpt_numpy does not support any flags
+                if (flags) {
+                    fa->flags |= NPY_ARRAY_F_CONTIGUOUS;
+                    if (nd > 1) {
+                        fa->flags &= ~NPY_ARRAY_C_CONTIGUOUS;
+                    }
+                    flags = NPY_ARRAY_F_CONTIGUOUS;
+                }
+                */
+            }
+        } else {
+            fa.flags = (flags & ~NPY_ARRAY_UPDATEIFCOPY);
+        }
+
+        fa.descr = descr;
+        fa.base = null;
+        fa.weakreflist = null;
+
+        if (nd > 0) {
+            fa.dimensions = [];
+            fa.strides = [];
+            // fill dimensions
+            dims.map(function(d) {
+                fa.dimensions.push(d);
+            });
+
+            if (strides == null) {
+                // fill them in
+                sd = _array_fill_strides(fa.strides, dims, nd, sd, flags, fa.flags);
+            } else {
+                strides.map(function(s) {
+                    fa.strides.push(s);
+                });
+                sd *= size;
+            }
+        } else {
+            fa.dimensions = null;
+            fa.strides = null;
+            fa.flags |= NPY_ARRAY_F_CONTIGUOUS;
+        }
+
+        if (data == null) {
+            // Allocate something even for zero-space arrays, e.g. shape=(0,)
+            if (sd == 0) {
+                sd = 1;
+            }
+
+            if (zeroed) {
+                // ToDo: check if we need todo something here!
+                data = [];
+            } else {
+                data = [];
+            }
+
+            fa.flags |= NPY_ARRAY_OWNDATA;
+        } else {
+            fa.flags &= ~NPY_ARRAY_OWNDATA;
+        }
+
+        fa.data = data;
+
+        // ToDo: https://github.com/numpy/numpy/blob/5d6a9f0030e8d1a63e43783c2b5b54cde93bc5d0/numpy/core/src/multiarray/ctors.c#L1090
+        // we do not support finalize methods (skulpt does do it either!)
+        
+        // fa is now just plain JS for representing an ndarray
+        // we now use skulpt code to make a real python/skulpt ndarray version out of it
+        var pyShape = new Sk.builtin.tuple((fa.dimensions || []).map(function(d) {
+            return new Sk.builtin.int_(d);
+        }));
+
+        var pyBuffer = new Sk.builtin.list(fa.data);
+
+        var dtype = fa.descr;
+
+        return Sk.misceval.callsim(mod[CLASS_NDARRAY], pyShape, dtype, pyBuffer);
+    }
+
+    function _array_fill_strides(strides, dims, nd, itemsize, infalg, objflags) {
+        var i;
+        var not_cf_contig = 0;
+        var nod = 0; // A dim 1= 1 was found
+
+        // Check if new array is both F- and C-contigous
+        for (i = 0; i < nd; i++) {
+            if (dims[i] != 1) {
+                if (nod) {
+                    not_cf_contig = 1;
+                    break;
+                }
+                nod = 1;
+            }
+        }
+
+        // Only make fortran strides if not contigous as well
+        // actually we do not really care, do we?
+        // ToDo: maybe add this later (see ctors.c)
+        for (i = nd - 1; i >= 0; i--) {
+            strides[i] = itemsize;
+            if (dims[i]) {
+                itemsize *= dims[i];
+            }
+            else {
+                not_cf_contig = 0;
+            }
+            if (dims[i] == 1) {
+                /* For testing purpose only */
+                strides[i] = NPY_MAX_INTP;
+            }
+        }
+
+        /*
+        if (not_cf_contig) {
+            *objflags = ((*objflags)|NPY_ARRAY_C_CONTIGUOUS) &
+                                            ~NPY_ARRAY_F_CONTIGUOUS;
+        }
+        else {
+            *objflags |= (NPY_ARRAY_C_CONTIGUOUS|NPY_ARRAY_F_CONTIGUOUS);
+        }
+        */
+
+        return itemsize;
+    }
+
+    function PyArray_NewFromDescr(subtype, descr, nd, dims, strides, data, flags, obj) {
+        return PyArray_NewFromDescr_int(subtype, descr, nd, dims, strides, data, flags, obj, 0);
+    }
+
+    /*NUMPY_API
+     * Generic new array creation routine.
+     */
+    function PyArray_New(subtype, nd, dims, type_num, strides, data, itemsize, flags, obj) {
+        var descr;
+        var _new;
+
+        descr = PyArray_DescrFromType(type_num);
+        if (descr == null) {
+            return null;
+        }
+
+        // we do not do any itemsize check as we do not need to allocate memory like in C
+        _new = PyArray_NewFromDescr(subtype, descr, nd, dims, strides, data, flags, obj);
+
+        return _new;
+    }
+
+    function new_array_for_sum(ap1, ap2, out, nd, dimensions, typenum) {
+        var ret;
+        var subtype;
+        var prior1;
+        var prior2;
+
+        // Sk.builtin.type == Py_TYPE macro
+        if (Sk.builtin.type(ap2) != Sk.builtin.type(ap1)) {
+            prior = PyArray_GetPriority(ap2, 0.0);
+            prior = PyArray_GetPriority(ap1, 0.0);
+            subtype = (prior2 > prior1 ? Sk.builtin.type(ap2) : Sk.builtin.type(ap1));
+        } else {
+            prior1 = prior2 = 0.0;
+            subtype = Sk.builtin.type(ap1);
+        }
+
+        if (out != null) {
+            throw new Error('new_array_for_sum does not support "out" parameter');
+        }
+
+        ret = PyArray_New(subtype, nd, dimensions, typenum, null, null, 0, 0, (prior2 > prior1 ? ap2 : ap1));
+
+        return ret;
     }
 
     // PyObject* PyArray_FromAny(PyObject* op, PyArray_Descr* dtype, int min_depth, int max_depth, int requirements, PyObject* context)
@@ -960,7 +1305,7 @@ var $builtinmodule = function (name) {
         var dimensions = new Array(); // npy_intp dimensions[NPY_MAXDIMS];
         var dot; // PyArrray_DotFunc *dot
         var typec = null; // PyArray_Descr *typec = NULL;
-        debugger;
+
         // make new pyarray object types from ops
         typenum = PyArray_ObjectType(op1, 0);
         typenum = PyArray_ObjectType(op2, typenum);
@@ -1018,13 +1363,15 @@ var $builtinmodule = function (name) {
         is1 = PyArray_STRIDES(ap1)[PyArray_NDIM(ap1)-1];
         is2 = PyArray_STRIDES(ap2)[matchDim];
         /* Choose which subtype to return */
-        //ret = new_array_for_sum(ap1, ap2, out, nd, dimensions, typenum);
+        ret = new_array_for_sum(ap1, ap2, out, nd, dimensions, typenum);
 
         // create new empty array for given dimensions
         var _shape = new Sk.builtin.tuple(dimensions.map(function(x) {
             return new Sk.builtin.int_(x);
         }));
-        ret = Sk.misceval.callsim(mod.zeros, _shape, typec);
+
+        // ToDo: CHANGE this to use new_array_for_sum!!!!
+        //ret = Sk.misceval.callsim(mod.zeros, _shape, typec);
 
         // Hint: the switch case function replaces the following lines
         //dot = PyArray_DESCR(ret)->f->dotfunc;
@@ -1044,6 +1391,7 @@ var $builtinmodule = function (name) {
             throw new Sk.builtin.ValueError('dot not available for this type');
         }
 
+        debugger;
         op = PyArray_DATA(ret);
         // os = PyArray_DESCR(ret).elsize; // we do not have element sizes in JavaScript
         os = 1; // we just deal with normal indicis
@@ -1061,10 +1409,15 @@ var $builtinmodule = function (name) {
             return null;
         }
 
-        var op_i = 0;
+        // it.dataptr is just the index to the current element (as we do not have C pointers in Javascript)
+        var op_i = 0; // own helper for assinging the result with out passing a pointer to dot method
+        var it1DeRefDataPtr; // reference to an array or subarray
+        var it2DeRefDataPtr;  // reference to an array or subarray based on it.dataptr derefenced
         while (it1.index < it1.size) {
+            it1DeRefDataPtr = PyArray_DATA(it1.ao).slice(it1.dataptr);
             while (it2.index < it2.size) {
-                op[op_i] = dot(it1.dataptr, is1, it2.dataptr, is2, null, l, ret);
+                it2DeRefDataPtr = PyArray_DATA(it1.ao).slice(it2.dataptr);
+                op[op_i] = dot(it1DeRefDataPtr, is1, it2DeRefDataPtr, is2, null, l, ret);
                 op_i += os;
                 PyArray_ITER_NEXT(it2);
             }
@@ -1085,7 +1438,6 @@ var $builtinmodule = function (name) {
   /**
         Class for numpy.ndarray
     **/
-  var CLASS_NDARRAY = "numpy.ndarray";
 
   function remapToJs_shallow(obj, shallow) {
     var _shallow = shallow || true;
@@ -1624,7 +1976,6 @@ var $builtinmodule = function (name) {
     **/
     function makeNumericBinaryOpLhs(operation) {
       return function (self, other) {
-        debugger;
         var lhs;
         var rhs;
         var buffer; // external

@@ -1271,6 +1271,75 @@ var $builtinmodule = function (name) {
           _buffer);
     }
 
+    function convert_shape_to_string(n, vals, ending) {
+        var i;
+        var ret;
+        var tmp;
+
+        for (i = 0; i < n && vals[i] < 0; i++);
+
+        if (i === n) {
+            return Sk.abstr.numberBinOp(new Sk.builtin.str('()%s'), new Sk.builtin.str(ending), 'Mod');
+        } else {
+            ret = Sk.abstr.numberBinOp(new Sk.builtin.str('(%i'), vals[i++], 'Mod');
+        }
+
+        for (; i < n; ++i) {
+            if (vals[i] < 0) {
+                tmp = new Sk.builtin.str(",newaxis");
+            } else {
+                tmp = Sk.abstr.numberBinOp(new Sk.builtin.str(',%i'), vals[i], 'Mod');
+            }
+
+            ret = Sk.abstr.numberBinOp(ret, tmp, 'Add');
+        }
+
+        if (i == 1) {
+            tmp = Sk.abstr.numberBinOp(new Sk.builtin.str(',)%s'), new Sk.builtin.str(ending), 'Mod');
+        } else {
+            tmp = Sk.abstr.numberBinOp(new Sk.builtin.str(')%s'), new Sk.builtin.str(ending), 'Mod');
+        }
+        ret = Sk.abstr.numberBinOp(ret, tmp, 'Add');
+        return ret;
+
+    }
+
+    function dot_alignment_error(a, i, b, j) {
+        var errmsg = null;
+        var format = null;
+        var fmt_args = null;
+        var i_obj = null;
+        var j_obj = null;
+        var shape1 = null;
+        var shape2 = null;
+        var shape1_i = null;
+        var shape2_j = null;
+
+        format = new Sk.builtin.str("shapes %s and %s not aligned: %d (dim %d) != %d (dim %d)");
+        shape1 = convert_shape_to_string(PyArray_NDIM(a), PyArray_DIMS(a), "");
+        shape2 = convert_shape_to_string(PyArray_NDIM(b), PyArray_DIMS(b), "");
+
+        i_obj = new Sk.builtin.int_(i);
+        j_obj = new Sk.builtin.int_(j);
+
+        shape1_i = new Sk.builtin.int_(PyArray_DIM(a, i));
+        shape2_j = new Sk.builtin.int_(PyArray_DIM(b, j));
+
+        if (!format || !shape1 || !shape2 || !i_obj || !j_obj ||
+                !shape1_i || !shape2_j) {
+            return;
+        }
+
+        fmt_args = new Sk.builtin.tuple([shape1, shape2, shape1_i, i_obj, shape2_j, j_obj]);
+
+        errmsg = Sk.abstr.numberBinOp(format, fmt_args, 'Mod');
+        if (errmsg != null) {
+            throw new Sk.builtin.ValueError(errmsg);
+        } else {
+            throw new Sk.builtin.ValueError('shapes are not aligned');
+        }
+    }
+
     /*NUMPY_API
      * Numeric.matrixproduct(a,v)
      * just like inner product but does the swapaxes stuff on the fly
@@ -1340,8 +1409,7 @@ var $builtinmodule = function (name) {
         }
 
         if (PyArray_DIMS(ap2)[matchDim] != l) {
-            // dot_alignment_error(ap1, PyArray_NDIM(ap1) - 1, ap2, matchDim);
-            throw new Sk.builtin.ValueError('shapes are not aligned');
+            dot_alignment_error(ap1, PyArray_NDIM(ap1) - 1, ap2, matchDim);
         }
 
         nd = PyArray_NDIM(ap1) + PyArray_NDIM(ap2) - 2;

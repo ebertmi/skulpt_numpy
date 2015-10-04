@@ -10,3 +10,9 @@ a = [[1, 0], [0, 1]]
 b = [[4, 1], [2, 2]]
 c = np.dot(a, b)
 print(c)
+
+# the next dot call will raise value error
+a = [[1, 0], [0, 1]]
+b = [[4, 1], [2, 2], [1, 2, 3]]
+c = np.dot(a, b)
+print(c)

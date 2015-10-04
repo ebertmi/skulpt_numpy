@@ -581,7 +581,7 @@ var $builtinmodule = function(name) {
             }
 
             var py_res = cont0_array(self.internal_state, rk_double, size, self.lock);
-
+            debugger;
             return py_res;
         };
         js_random_sample.co_varnames = ['self', 'size'];

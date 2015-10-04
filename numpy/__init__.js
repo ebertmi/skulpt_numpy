@@ -1415,7 +1415,7 @@ var $builtinmodule = function (name) {
         while (it1.index < it1.size) {
             it1DeRefDataPtr = PyArray_DATA(it1.ao).slice(it1.dataptr);
             while (it2.index < it2.size) {
-                it2DeRefDataPtr = PyArray_DATA(it1.ao).slice(it2.dataptr);
+                it2DeRefDataPtr = PyArray_DATA(it2.ao).slice(it2.dataptr);
                 op[op_i] = dot(it1DeRefDataPtr, is1, it2DeRefDataPtr, is2, null, l, ret);
                 op_i += os;
                 PyArray_ITER_NEXT(it2);
@@ -2008,6 +2008,30 @@ var $builtinmodule = function (name) {
       };
     }
 
+    function makeNumericBinaryOpInplace(operation) {
+        return function (self, other) {
+            var lhs;
+            var rhs;
+            var i;
+
+            if (PyArray_Check(other)) {
+              lhs = PyArray_DATA(self);
+              rhs = PyArray_DATA(other);
+              for (i = 0, len = lhs.length; i < len; i++) {
+                lhs[i] = Sk.abstr.binary_op_(lhs[i], rhs[i], operation);
+              }
+            } else {
+              lhs = PyArray_DATA(self);
+              for (i = 0, len = lhs.length; i < len; i++) {
+                lhs[i] = Sk.abstr.numberBinOp(lhs[i], other, operation);
+              }
+            }
+
+            return self;
+        };
+    }
+
+
     function makeNumericBinaryOpRhs(operation) {
       return function (self, other) {
         var rhsBuffer = PyArray_DATA(self);
@@ -2041,27 +2065,39 @@ var $builtinmodule = function (name) {
 
     $loc.__add__ = new Sk.builtin.func(makeNumericBinaryOpLhs("Add"));
     $loc.__radd__ = new Sk.builtin.func(makeNumericBinaryOpRhs("Add"));
+    $loc.__iadd__ = new Sk.builtin.func(makeNumericBinaryOpInplace("Add"));
 
     $loc.__sub__ = new Sk.builtin.func(makeNumericBinaryOpLhs("Sub"));
     $loc.__rsub__ = new Sk.builtin.func(makeNumericBinaryOpRhs("Sub"));
+    $loc.__isub__ = new Sk.builtin.func(makeNumericBinaryOpInplace("Sub"));
 
     $loc.__mul__ = new Sk.builtin.func(makeNumericBinaryOpLhs("Mult"));
     $loc.__rmul__ = new Sk.builtin.func(makeNumericBinaryOpRhs("Mult"));
+    $loc.__imul__ = new Sk.builtin.func(makeNumericBinaryOpInplace("Mult"));
 
     $loc.__div__ = new Sk.builtin.func(makeNumericBinaryOpLhs("Div"));
     $loc.__rdiv__ = new Sk.builtin.func(makeNumericBinaryOpRhs("Div"));
+    $loc.__idiv__ = new Sk.builtin.func(makeNumericBinaryOpInplace("Div"));
+
+    $loc.__floordiv__ = new Sk.builtin.func(makeNumericBinaryOpLhs("FloorDiv"));
+    $loc.__rfloordiv__ = new Sk.builtin.func(makeNumericBinaryOpRhs("FloorDiv"));
+    $loc.__ifloordiv__ = new Sk.builtin.func(makeNumericBinaryOpInplace("FloorDiv"));
 
     $loc.__mod__ = new Sk.builtin.func(makeNumericBinaryOpLhs("Mod"));
     $loc.__rmod__ = new Sk.builtin.func(makeNumericBinaryOpRhs("Mod"));
+    $loc.__imod__ = new Sk.builtin.func(makeNumericBinaryOpInplace("Mod"));
 
     $loc.__xor__ = new Sk.builtin.func(makeNumericBinaryOpLhs("BitXor"));
     $loc.__rxor__ = new Sk.builtin.func(makeNumericBinaryOpRhs("BitXor"));
+    $loc.__ixor__ = new Sk.builtin.func(makeNumericBinaryOpInplace("BitXor"));
 
     $loc.__lshift__ = new Sk.builtin.func(makeNumericBinaryOpLhs("LShift"));
     $loc.__rlshift__ = new Sk.builtin.func(makeNumericBinaryOpRhs("LShift"));
+    $loc.__ilshift__ = new Sk.builtin.func(makeNumericBinaryOpInplace("LShift"));
 
     $loc.__rshift__ = new Sk.builtin.func(makeNumericBinaryOpLhs("RShift"));
     $loc.__rrshift__ = new Sk.builtin.func(makeNumericBinaryOpRhs("RShift"));
+    $loc.__irshift__ = new Sk.builtin.func(makeNumericBinaryOpInplace("RShift"));
 
     $loc.__pos__ = new Sk.builtin.func(makeUnaryOp("UAdd"));
     $loc.__neg__ = new Sk.builtin.func(makeUnaryOp("USub"));

@@ -683,7 +683,7 @@ var $builtinmodule = function (name) {
 
         var ip1_i = 0;
         var ip2_i = 0;
-        debugger;
+
         for (i = 0; i < n; i++, ip1_i += is1, ip2_i += is2) {
             if (ip1[ip1_i] == null || ip2[ip2_i] == null) {
                 tmp1 = Sk.builtin.bool.false$;
@@ -1391,7 +1391,6 @@ var $builtinmodule = function (name) {
             throw new Sk.builtin.ValueError('dot not available for this type');
         }
 
-        debugger;
         op = PyArray_DATA(ret);
         // os = PyArray_DESCR(ret).elsize; // we do not have element sizes in JavaScript
         os = 1; // we just deal with normal indicis

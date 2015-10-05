@@ -1819,7 +1819,7 @@ var $builtinmodule = function (name) {
     });
 
     $loc.__getslice__ = new Sk.builtin.func( function (self, start, stop) {
-      Sk.builtin.pyCheckArgs( "[]", arguments, 3, 2 );
+      Sk.builtin.pyCheckArgs( "[]", arguments, 2, 3 );
       var ndarrayJs = Sk.ffi.remapToJs( self );
       var _index; // current index
       var _buffer; // buffer as python type
@@ -1857,7 +1857,7 @@ var $builtinmodule = function (name) {
         return Sk.misceval.callsim(mod[ CLASS_NDARRAY ], _shape, undefined,
           _buffer );
       } else {
-        throw new Sk.builtin.ValueError( 'Index "' + index +
+        throw new Sk.builtin.ValueError( 'Index "' + _index +
           '" must be int' );
       }
     } );
@@ -1906,7 +1906,6 @@ var $builtinmodule = function (name) {
       var _stride; // stride
       var _shape; // shape as js
       var i;
-      debugger;
       // single index e.g. [3]
       if (Sk.builtin.checkInt(index)) {
         var offset = Sk.ffi.remapToJs(index);
@@ -1944,21 +1943,14 @@ var $builtinmodule = function (name) {
         return ndarrayJs.buffer[computeOffset(ndarrayJs.strides, keyJs)];
       } else if (index instanceof Sk.builtin.slice) {
         // support for slices e.g. [1:4:-1]
-        var indices = Sk.misceval.callsim(index.indices, index, Sk.builtin.len(self));
-        var start = typeof indices[0] !== 'undefined' ? indices[0] : 0;
-        var stop = typeof indices[1] !== 'undefined' ? indices[1] :
-          ndarrayJs
-          .buffer.length;
-        stop = stop > ndarrayJs.buffer.length ? ndarrayJs.buffer.length :
-          stop;
-        var step = typeof indices[2] !== 'undefined' ? indices[2] : 1;
+        var length = Sk.builtin.len(self);
         buffer_internal = [];
-        _index = 0;
-        if (step > 0) {
-          for (i = start; i < stop; i += step) {
-            buffer_internal[_index++] = ndarrayJs.buffer[i];
-          }
-        }
+        length = Sk.ffi.remapToJs(length);
+        index.sssiter$(length, function (i, wrt) {
+            if (i >= 0 && i < length) {
+                buffer_internal.push(PyArray_DATA(self)[i]);
+            }
+        });
         _buffer = new Sk.builtin.list(buffer_internal);
         _shape = new Sk.builtin.tuple([buffer_internal.length].map(
           function (

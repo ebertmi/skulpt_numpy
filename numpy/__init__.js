@@ -1906,7 +1906,7 @@ var $builtinmodule = function (name) {
       var _stride; // stride
       var _shape; // shape as js
       var i;
-
+      debugger;
       // single index e.g. [3]
       if (Sk.builtin.checkInt(index)) {
         var offset = Sk.ffi.remapToJs(index);
@@ -1943,8 +1943,8 @@ var $builtinmodule = function (name) {
         var keyJs = Sk.ffi.remapToJs(index);
         return ndarrayJs.buffer[computeOffset(ndarrayJs.strides, keyJs)];
       } else if (index instanceof Sk.builtin.slice) {
-        // support for slices e.g. [1:4]
-        var indices = index.indices();
+        // support for slices e.g. [1:4:-1]
+        var indices = Sk.misceval.callsim(index.indices, index, Sk.builtin.len(self));
         var start = typeof indices[0] !== 'undefined' ? indices[0] : 0;
         var stop = typeof indices[1] !== 'undefined' ? indices[1] :
           ndarrayJs

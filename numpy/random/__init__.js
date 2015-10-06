@@ -49,7 +49,7 @@ var rk_strerror = [
     'random device unavailable',
 ];
 
-var RK_MAX = 0xFFFFFFFF;
+var RK_MAX = 4294967296.0; // old value0xFFFFFFFF;
 
 var rk_hash_uint;
 if (typeof Uint32Array === undefined) {
@@ -75,13 +75,17 @@ function rk_hash(key) {
  */
 function rk_seed(seed, state) {
     var pos;
-    seed &= 0xffffffff;
+    var s;
+
+    state.key[0] = seed >>> 0;
 
     /* Knuth's PRNG as used in the Mersenne Twister reference implementation */
-    for (pos = 0; pos < RK_STATE_LEN; pos++) {
-        state.key[pos] = seed;
-        seed = (1812433253 * (seed ^ (seed >>> 30)) + pos + 1) & 0xffffffff;
+    for (pos = 1; pos < RK_STATE_LEN; pos++) {
+        s = state.key[pos - 1] ^ (state.key[pos - 1] >>> 30);
+        state.key[pos] = (((((s & 0xffff0000) >>> 16) * 1812433253) << 16) + (s & 0x0000ffff) * 1812433253) + pos;
+        state.key[pos] >>>= 0;
     }
+
     state.pos = RK_STATE_LEN;
     state.gauss = 0;
     state.has_gauss = 0;
@@ -219,7 +223,7 @@ function rk_double(state) {
     /* shifts : 67108864 = 0x4000000, 9007199254740992 = 0x20000000000000 */
     var a = rk_random(state) >>> 5;
     var b = rk_random(state) >>> 6;
-    return (a * 67108864.0 + b) / 9007199254740992.0;
+    return (a * 67108864.0 + b) * (1.0 / 9007199254740992.0);
 }
 
 /*
@@ -420,7 +424,7 @@ function cont0_array(state, func, size, lock) {
     array_data = array.v.buffer; // data view on the ndarray
 
     for (i = 0; i < length; i++) {
-        array_data[i] = func.call(null, state);
+        array_data[i] = new Sk.builtin.float_(func.call(null, state));
     }
 
     return array;
@@ -438,7 +442,7 @@ var $builtinmodule = function(name) {
 
     var randomState_c = function($gbl, $loc) {
         var js__init__ = function(self, seed) {
-            debugger;
+            //debugger;
             if (seed == null) {
                 seed = Sk.builtin.none.none$;
             }
@@ -579,9 +583,9 @@ var $builtinmodule = function(name) {
             if (size == null) {
                 size = Sk.builtin.none.none$;
             }
-
-            var py_res = cont0_array(self.internal_state, rk_double, size, self.lock);
             debugger;
+            var py_res = cont0_array(self.internal_state, rk_double, size, self.lock);
+
             return py_res;
         };
         js_random_sample.co_varnames = ['self', 'size'];

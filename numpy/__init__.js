@@ -603,7 +603,7 @@ var $builtinmodule = function (name) {
 
     function PyArray_STRIDES(arr) {
         if (PyArray_Check(arr)) {
-            return computeStrides(arr.v.shape);
+            return arr.v.strides;
         } else {
             throw new Error('Internal API-Call Error occured in PyArray_STRIDES.', arr);
         }
@@ -611,7 +611,7 @@ var $builtinmodule = function (name) {
 
     function PyArray_STRIDE(arr, n) {
         if (PyArray_Check(arr)) {
-            var strides = computeStrides(arr.v.shape);
+            var strides = arr.v.strides;
             return strides[n];
         } else {
             throw new Error('Internal API-Call Error occured in PyArray_STRIDE.', arr);
@@ -667,6 +667,74 @@ var $builtinmodule = function (name) {
         }
     }
 
+    function PyArray_FLAGS(arr) {
+        if (PyArray_Check(arr)) {
+            return arr.v.flags;
+        } else {
+            throw new Error('Internal API-Call Error occured in PyArray_NewShape.', arr);
+        }
+    }
+
+    function PyArray_Transpose(ap, permute) {
+        // ap = array object
+        // permute = PyArrayDims []
+        var axes = [];
+        var axis;
+        var permutation = [];
+        var reverse_permutation = [];
+        var ret = null;
+        var flags;
+
+        if (permute == null) {
+            n = PyArray_NDIM(ap);
+            for (i = 0; i < n; i++) {
+                permutation[i] = n -1 - i;
+            }
+        } else {
+            n = permute.length;
+            axes = permute;
+            if (n != PyArray_NDIM(ap)) {
+                throw new Sk.builtin.ValueError("axes don't match array");
+            }
+
+            for (i = 0; i < n; i++) {
+                reverse_permutation[i] = -1;
+            }
+
+            for (i = 0; i < n; i++) {
+                axis = axes[i];
+                if (axis < 0) {
+                    axis = PyArray_NDIM(ap) + axis;
+                }
+
+                if (axis < 0 || axis >= PyArray_NDIM(ap)) {
+                    throw new Sk.builtin.ValueError('invalid axis for this array');
+                }
+
+                if (reverse_permutation[axis] != -1) {
+                    throw new Sk.builtin.ValueError('repeated axis in transpose');
+                }
+
+                reverse_permutation[axis] = i;
+                permutation[i] = axis;
+            }
+        }
+
+        flags = PyArray_FLAGS(ap);
+
+        ret = PyArray_NewFromDescr(Sk.builtin.type(ap), PyArray_DESCR(ap), n, PyArray_DIMS(ap), null, PyArray_DATA(ap), flags, ap);
+
+        // fix the dimensions and strides of the return array
+        for (i = 0; i < n; i++) {
+            PyArray_DIMS(ret)[i] = PyArray_DIMS(ap)[permutation[i]];
+            PyArray_STRIDES(ret)[i] = PyArray_STRIDES(ap)[permutation[i]];
+        }
+
+        //     PyArray_UpdateFlags(ret, NPY_ARRAY_C_CONTIGUOUS | NPY_ARRAY_F_CONTIGUOUS |NPY_ARRAY_ALIGNED);
+
+        return ret;
+    }
+
     // OBJECT_dot is the method used for python types
     // https://github.com/numpy/numpy/blob/f43d691fd0b9b4f416b50fba34876691af2d0bd4/numpy/core/src/multiarray/arraytypes.c.src#L3497
     function OBJECT_dot(ip1, is1, ip2, is2, op, n, ignore) {
@@ -683,7 +751,7 @@ var $builtinmodule = function (name) {
 
         var ip1_i = 0;
         var ip2_i = 0;
-
+        debugger;
         for (i = 0; i < n; i++, ip1_i += is1, ip2_i += is2) {
             if (ip1[ip1_i] == null || ip2[ip2_i] == null) {
                 tmp1 = Sk.builtin.bool.false$;
@@ -1495,12 +1563,94 @@ var $builtinmodule = function (name) {
         return ret;
     }
 
-  var np = new numpy();
+    function PyTypeNum_ISFLEXIBLE(type) {
+        // ToDo: uncomment this, when we've added all types from ndarraytypes.h
+        return false; //(((type) >= NPY_STRING) && ((type) <= NPY_VOID));
+    }
 
-  var mod = {};
+    function PyTypeNum_ISEXTENDED(type) {
+        return PyTypeNum_ISFLEXIBLE; /* || PyTypeNum_ISUSERDEF(type) */
+    } 
 
-  // doc string for numpy module
-  mod.__doc__ = new Sk.builtin.str('\nNumPy\n=====\n\nProvides\n  1. An array object of arbitrary homogeneous items\n  2. Fast mathematical operations over arrays\n  3. Linear Algebra, Fourier Transforms, Random Number Generation\n\nHow to use the documentation\n----------------------------\nDocumentation is available in two forms: docstrings provided\nwith the code, and a loose standing reference guide, available from\n`the NumPy homepage <http://www.scipy.org>`_.\n\nWe recommend exploring the docstrings using\n`IPython <http://ipython.scipy.org>`_, an advanced Python shell with\nTAB-completion and introspection capabilities.  See below for further\ninstructions.\n\nThe docstring examples assume that `numpy` has been imported as `np`::\n\n  >>> import numpy as np\n\nCode snippets are indicated by three greater-than signs::\n\n  >>> x = 42\n  >>> x = x + 1\n\nUse the built-in ``help`` function to view a function\'s docstring::\n\n  >>> help(np.sort)\n  ... # doctest: +SKIP\n\nFor some objects, ``np.info(obj)`` may provide additional help.  This is\nparticularly true if you see the line "Help on ufunc object:" at the top\nof the help() page.  Ufuncs are implemented in C, not Python, for speed.\nThe native Python help() does not know how to view their help, but our\nnp.info() function does.\n\nTo search for documents containing a keyword, do::\n\n  >>> np.lookfor(\'keyword\')\n  ... # doctest: +SKIP\n\nGeneral-purpose documents like a glossary and help on the basic concepts\nof numpy are available under the ``doc`` sub-module::\n\n  >>> from numpy import doc\n  >>> help(doc)\n  ... # doctest: +SKIP\n\nAvailable subpackages\n---------------------\ndoc\n    Topical documentation on broadcasting, indexing, etc.\nlib\n    Basic functions used by several sub-packages.\nrandom\n    Core Random Tools\nlinalg\n    Core Linear Algebra Tools\nfft\n    Core FFT routines\npolynomial\n    Polynomial tools\ntesting\n    Numpy testing tools\nf2py\n    Fortran to Python Interface Generator.\ndistutils\n    Enhancements to distutils with support for\n    Fortran compilers support and more.\n\nUtilities\n---------\ntest\n    Run numpy unittests\nshow_config\n    Show numpy build configuration\ndual\n    Overwrite certain functions with high-performance Scipy tools\nmatlib\n    Make everything matrices.\n__version__\n    Numpy version string\n\nViewing documentation using IPython\n-----------------------------------\nStart IPython with the NumPy profile (``ipython -p numpy``), which will\nimport `numpy` under the alias `np`.  Then, use the ``cpaste`` command to\npaste examples into the shell.  To see which functions are available in\n`numpy`, type ``np.<TAB>`` (where ``<TAB>`` refers to the TAB key), or use\n``np.*cos*?<ENTER>`` (where ``<ENTER>`` refers to the ENTER key) to narrow\ndown the list.  To view the docstring for a function, use\n``np.cos?<ENTER>`` (to view the docstring) and ``np.cos??<ENTER>`` (to view\nthe source code).\n\nCopies vs. in-place operation\n-----------------------------\nMost of the functions in `numpy` return a copy of the array argument\n(e.g., `np.sort`).  In-place versions of these functions are often\navailable as array methods, i.e. ``x = np.array([1,2,3]); x.sort()``.\nExceptions to this rule are documented.\n\n');
+    function replaceAt(str, index, character) {
+        return str.substr(0, index) + character + str.substr(index+character.length);
+    }
+
+    function dump_data(strPtr, nPtr, max_n, data, nd, dimensions, strides, self) {
+        var descr = PyArray_DESCR(self);
+        var op = null;
+        var sp = null;
+        var ostring;
+        var i;
+        var N;
+        var ret = 0;
+        
+        if (nd === 0) {
+            op = data[0];
+            sp = Sk.builtin.repr(op);
+            N = sp.v.length;
+            nPtr.n += N;
+            strPtr.str += sp.v;
+        } else {
+            strPtr.str += "[";
+            nPtr.n += 1;
+            for (i = 0; i < dimensions[0]; i++) {
+                var newData = data.slice(strides[0] * i);
+                var newDimensions = dimensions.slice(1);
+                var newStrides = strides.slice(1);
+                dump_data(strPtr, nPtr, max_n, newData, nd - 1, newDimensions, newStrides, self);
+
+                if (i < dimensions[0] - 1) {
+                    strPtr.str += ',';
+                    strPtr.str += ' '; // replaceAt(str, nPtr.n + 1, ' ');
+                    nPtr.n += 2;
+                }
+            }
+
+            strPtr.str +=  ']'; //replaceAt(str, nPtr.n, ']');
+            nPtr.n += 1;
+        }
+
+        return ret;
+    }
+
+    function array_repr_builtin(self, repr) {
+        // self is ndarrray
+        // repr is int
+        var ret;
+        var string;
+        var n = 0;
+        var max_n = 0; // stupid mem alloc stuff -.-
+        var format;
+        var fmt_args;
+        var nPtr = {n: n};
+        var strPtr = {str: ""};
+        dump_data(strPtr, nPtr, max_n, PyArray_DATA(self), PyArray_NDIM(self), PyArray_DIMS(self), PyArray_STRIDES(self), self);
+        string = new Sk.builtin.str(strPtr.str);
+        if (repr) {
+            if (PyTypeNum_ISEXTENDED(self)) {
+                format = new Sk.builtin.str("array(%s, '%s')"); // required some changes "array(%s, '%c%d')" (we do not have access to elsize)
+                fmt_args = new Sk.builtin.tuple([string, PyArray_DESCR(self)]);
+                ret = Sk.abstr.numberBinOp(format, fmt_args, 'Mod');
+            } else {
+                format = new Sk.builtin.str("array(%s, '%s')"); // required some changes "array(%s, '%c%d')" (we do not have access to elsize)
+                fmt_args = new Sk.builtin.tuple([string, PyArray_DESCR(self)]);
+                ret = Sk.abstr.numberBinOp(format, fmt_args, 'Mod');
+            }
+        } else {
+            return string;
+        }
+
+        return ret;
+    }
+
+    var PyArray_StrFunction = null; // default there is no string function, if not set
+    var np = new numpy();
+
+    var mod = {};
+
+    // doc string for numpy module
+    mod.__doc__ = new Sk.builtin.str('\nNumPy\n=====\n\nProvides\n  1. An array object of arbitrary homogeneous items\n  2. Fast mathematical operations over arrays\n  3. Linear Algebra, Fourier Transforms, Random Number Generation\n\nHow to use the documentation\n----------------------------\nDocumentation is available in two forms: docstrings provided\nwith the code, and a loose standing reference guide, available from\n`the NumPy homepage <http://www.scipy.org>`_.\n\nWe recommend exploring the docstrings using\n`IPython <http://ipython.scipy.org>`_, an advanced Python shell with\nTAB-completion and introspection capabilities.  See below for further\ninstructions.\n\nThe docstring examples assume that `numpy` has been imported as `np`::\n\n  >>> import numpy as np\n\nCode snippets are indicated by three greater-than signs::\n\n  >>> x = 42\n  >>> x = x + 1\n\nUse the built-in ``help`` function to view a function\'s docstring::\n\n  >>> help(np.sort)\n  ... # doctest: +SKIP\n\nFor some objects, ``np.info(obj)`` may provide additional help.  This is\nparticularly true if you see the line "Help on ufunc object:" at the top\nof the help() page.  Ufuncs are implemented in C, not Python, for speed.\nThe native Python help() does not know how to view their help, but our\nnp.info() function does.\n\nTo search for documents containing a keyword, do::\n\n  >>> np.lookfor(\'keyword\')\n  ... # doctest: +SKIP\n\nGeneral-purpose documents like a glossary and help on the basic concepts\nof numpy are available under the ``doc`` sub-module::\n\n  >>> from numpy import doc\n  >>> help(doc)\n  ... # doctest: +SKIP\n\nAvailable subpackages\n---------------------\ndoc\n    Topical documentation on broadcasting, indexing, etc.\nlib\n    Basic functions used by several sub-packages.\nrandom\n    Core Random Tools\nlinalg\n    Core Linear Algebra Tools\nfft\n    Core FFT routines\npolynomial\n    Polynomial tools\ntesting\n    Numpy testing tools\nf2py\n    Fortran to Python Interface Generator.\ndistutils\n    Enhancements to distutils with support for\n    Fortran compilers support and more.\n\nUtilities\n---------\ntest\n    Run numpy unittests\nshow_config\n    Show numpy build configuration\ndual\n    Overwrite certain functions with high-performance Scipy tools\nmatlib\n    Make everything matrices.\n__version__\n    Numpy version string\n\nViewing documentation using IPython\n-----------------------------------\nStart IPython with the NumPy profile (``ipython -p numpy``), which will\nimport `numpy` under the alias `np`.  Then, use the ``cpaste`` command to\npaste examples into the shell.  To see which functions are available in\n`numpy`, type ``np.<TAB>`` (where ``<TAB>`` refers to the TAB key), or use\n``np.*cos*?<ENTER>`` (where ``<ENTER>`` refers to the ENTER key) to narrow\ndown the list.  To view the docstring for a function, use\n``np.cos?<ENTER>`` (to view the docstring) and ``np.cos??<ENTER>`` (to view\nthe source code).\n\nCopies vs. in-place operation\n-----------------------------\nMost of the functions in `numpy` return a copy of the array argument\n(e.g., `np.sort`).  In-place versions of these functions are often\navailable as array methods, i.e. ``x = np.array([1,2,3]); x.sort()``.\nExceptions to this rule are documented.\n\n');
 
   /**
         Class for numpy.ndarray
@@ -1607,9 +1757,15 @@ var $builtinmodule = function (name) {
         }
 
         if (idxLevel < uBound) {
-          str += "[";
-          idxLevel += 1;
+            // add checks for line breaks
+            idxLevel += 1;
+            // ToDo!
+            if (shape[idxLevel] > 0 && idxLevel > 0 && i == shape[idxLevel]) {
+                str += "\n";
+            }
+            str += "[";
         } else {
+            // ToDo: pass in precision?
           str += Sk.ffi.remapToJs(Sk.builtin.str(buffer[i++]));
           emits[idxLevel] += 1;
         }
@@ -1681,6 +1837,7 @@ var $builtinmodule = function (name) {
 
       ndarrayJs.strides = computeStrides(ndarrayJs.shape);
       ndarrayJs.dtype = dtype || Sk.builtin.none.none$;
+      ndarrayJs.flags = 0x0; // set flags to zero
 
       // allow any nested data structure
       if (buffer && buffer instanceof Sk.builtin.list) {
@@ -1749,7 +1906,8 @@ var $builtinmodule = function (name) {
                 case 'shape':
                     // trigger reshape;
                     var js_shape = PyArray_UNPACK_SHAPE(self, value);
-
+                    // ToDo: figure if we need to do this?
+                    self.v.strides = computeStrides(js_shape);
                     self.v.shape = js_shape;
                     return;
             }
@@ -1940,6 +2098,10 @@ var $builtinmodule = function (name) {
       } else if (index instanceof Sk.builtin.tuple) {
         // index like [1,3]
         var keyJs = Sk.ffi.remapToJs(index);
+        if (index.length != PyArray_DIMS(self).length) {
+            throw new Sk.builtin.ValueError('Tuple must contain values for all dimensions');
+        }
+        // ToDo: implement buffer returning for smaller bits
         return ndarrayJs.buffer[computeOffset(ndarrayJs.strides, keyJs)];
       } else if (index instanceof Sk.builtin.slice) {
         // support for slices e.g. [1:4:-1]
@@ -2018,16 +2180,21 @@ var $builtinmodule = function (name) {
       return ret;
     });
 
+    function _formatArray(a, format_function, rank, max_line_len, next_line_prefix, separator, edge_items, summary_insert) {
+        // port the functions and output the items in a nice way
+        // https://github.com/numpy/numpy/blob/v1.9.1/numpy/core/arrayprint.py#L465
+    }
+
     $loc.__str__ = new Sk.builtin.func(function (self) {
-      var ndarrayJs = remapToJs_shallow(self, false);
-      return new Sk.builtin.str(stringify(ndarrayJs.buffer,
-        ndarrayJs.shape, ndarrayJs.dtype));
+        if (PyArray_StrFunction == null) {
+            return Sk.misceval.callsim(self.__repr__, self);
+        } else {
+            return PyArray_StrFunction.call(null, self);
+        }
     });
 
     $loc.__repr__ = new Sk.builtin.func(function (self) {
-      var ndarrayJs = Sk.ffi.remapToJs(self);
-      return new Sk.builtin.str("array(" + stringify(ndarrayJs.buffer,
-        ndarrayJs.shape, ndarrayJs.dtype) + ")");
+      return array_repr_builtin(self, 1);
     });
 
     /**
@@ -2178,20 +2345,31 @@ var $builtinmodule = function (name) {
     });
 
     // reference: https://github.com/numpy/numpy/blob/41afcc3681d250f231aea9d9f428a9e197a47f6e/numpy/core/src/multiarray/shape.c#L692
-    $loc.transpose = new Sk.builtin.func(function (self, axes) {
+    $loc.transpose = new Sk.builtin.func(function (self, args) {
         // http://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.transpose.html
-        if (axes == null || Sk.builtin.checkNone(axes)) {
-            // reverse order of the axes and return
-            var py_shape = new Sk.builtin.tuple(self.v.shape.map(function (x) {
-              return new Sk.builtin.int_(x);
-            }));
-            var py_buffer = new Sk.builtin.list(PyArray_DATA(self));
-            var ndarray_copy = Sk.misceval.callsim(mod[ CLASS_NDARRAY ], py_shape, PyArray_DESCR(self), py_buffer);
-            var reversed_shape = ndarray_copy.v.shape.reverse(); // reverse the order
-            return ndarray_copy;
-        } else {
-            throw new Sk.builtin.NotImplementedError('ndarray.tranpose does not support the axes parameter');
+        // https://github.com/numpy/numpy/blob/d033b6e19fc95a1f1fd6592de8318178368011b1/numpy/core/src/multiarray/methods.c#L1896
+        var shape = Sk.builtin.none.none$;
+        var n = arguments.length - 1;
+        var permute = [];
+        var ret;
+
+        // get args
+        args = Array.prototype.slice.call(arguments, 1); 
+
+        if (n > 1) {
+            shape = args;
+        } else if (n === 1) {
+            shape = args[0];
         }
+
+        if (Sk.builtin.checkNone(shape)) {
+            ret = PyArray_Transpose(self, null);
+        } else {
+            permute = Sk.ffi.remapToJs(shape);
+            ret = PyArray_Transpose(self, permute);
+        }
+
+        return ret;
     });
 
     // end of ndarray_f

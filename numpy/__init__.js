@@ -402,7 +402,7 @@ var $builtinmodule = function (name) {
 
     // it.dataptr is just the index to the current element (as we do not have C pointers in Javascript)
     function _PyArray_ITER_NEXT1(it) {
-        it.dataptr =  it.strides[0];
+        it.dataptr +=  it.strides[0];
         it.coordinates[0] += 1;
     }
 
@@ -410,11 +410,11 @@ var $builtinmodule = function (name) {
     function _PyArray_ITER_NEXT2(it) {
         if (it.coordinates[1] < it.dims_m1[1]) {
             it.coordinates[1] += 1;
-            it.dataptr =  it.strides[1];
+            it.dataptr +=  it.strides[1];
         } else {
             it.coordinates[1] = 0;
             it.coordinates[0] += 1;
-            it.dataptr =  it.strides[0] - it.backstrides[1];
+            it.dataptr +=  it.strides[0] - it.backstrides[1];
         }
     }
 
@@ -431,10 +431,10 @@ var $builtinmodule = function (name) {
                 if (it.coordinates[__npy_i] < it.dims_m1[__npy_i]) {
                     it.coordinates[__npy_i] += 1;
                     // _PyAIT(it)->dataptr += _PyAIT(it)->strides[__npy_i];
-                    it.dataptr = it.strides[__npy_i];
+                    it.dataptr += it.strides[__npy_i];
                 } else {
                     it.coordinates[__npy_i] = 0;
-                    it.dataptr = it.backstrides[__npy_i];
+                    it.dataptr += it.backstrides[__npy_i];
                 }
             }
         }
@@ -751,7 +751,7 @@ var $builtinmodule = function (name) {
 
         var ip1_i = 0;
         var ip2_i = 0;
-        debugger;
+
         for (i = 0; i < n; i++, ip1_i += is1, ip2_i += is2) {
             if (ip1[ip1_i] == null || ip2[ip2_i] == null) {
                 tmp1 = Sk.builtin.bool.false$;
@@ -1543,7 +1543,7 @@ var $builtinmodule = function (name) {
         if (it2 == null) {
             return null;
         }
-
+        debugger;
         // it.dataptr is just the index to the current element (as we do not have C pointers in Javascript)
         var op_i = 0; // own helper for assinging the result with out passing a pointer to dot method
         var it1DeRefDataPtr; // reference to an array or subarray

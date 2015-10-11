@@ -688,7 +688,7 @@ var $builtinmodule = function (name) {
         if (permute == null) {
             n = PyArray_NDIM(ap);
             for (i = 0; i < n; i++) {
-                permutation[i] = n -1 - i;
+                permutation[i] = n - 1 - i;
             }
         } else {
             n = permute.length;
@@ -723,16 +723,19 @@ var $builtinmodule = function (name) {
         flags = PyArray_FLAGS(ap);
 
         ret = PyArray_NewFromDescr(Sk.builtin.type(ap), PyArray_DESCR(ap), n, PyArray_DIMS(ap), null, PyArray_DATA(ap), flags, ap);
-
+        //var newBuffer = Sk.misceval.callsim(ret.tolist, ret);
+        //ret.v.buffer = remapToJs_shallow(newBuffer, true);
         // fix the dimensions and strides of the return array
         for (i = 0; i < n; i++) {
             PyArray_DIMS(ret)[i] = PyArray_DIMS(ap)[permutation[i]];
             PyArray_STRIDES(ret)[i] = PyArray_STRIDES(ap)[permutation[i]];
         }
 
+        var list = Sk.misceval.callsim(ret.tolist, ret);
+        var newArray = Sk.misceval.callsim(mod.array, list);
         //     PyArray_UpdateFlags(ret, NPY_ARRAY_C_CONTIGUOUS | NPY_ARRAY_F_CONTIGUOUS |NPY_ARRAY_ALIGNED);
 
-        return ret;
+        return newArray;
     }
 
     // OBJECT_dot is the method used for python types
@@ -1106,16 +1109,13 @@ var $builtinmodule = function (name) {
         if (data == null) {
             fa.flags = NPY_ARRAY_DEFAULT;
             if (flags) {
-                /*
-                // ToDo: currently skulpt_numpy does not support any flags
                 if (flags) {
-                    fa->flags |= NPY_ARRAY_F_CONTIGUOUS;
+                    fa.flags |= NPY_ARRAY_F_CONTIGUOUS;
                     if (nd > 1) {
-                        fa->flags &= ~NPY_ARRAY_C_CONTIGUOUS;
+                        fa.flags &= ~NPY_ARRAY_C_CONTIGUOUS;
                     }
                     flags = NPY_ARRAY_F_CONTIGUOUS;
                 }
-                */
             }
         } else {
             fa.flags = (flags & ~NPY_ARRAY_UPDATEIFCOPY);
@@ -1166,6 +1166,7 @@ var $builtinmodule = function (name) {
             fa.flags &= ~NPY_ARRAY_OWNDATA;
         }
 
+        // map data?
         fa.data = data;
 
         // ToDo: https://github.com/numpy/numpy/blob/5d6a9f0030e8d1a63e43783c2b5b54cde93bc5d0/numpy/core/src/multiarray/ctors.c#L1090
@@ -1177,6 +1178,7 @@ var $builtinmodule = function (name) {
             return new Sk.builtin.int_(d);
         }));
 
+        // we need to make a deep copy of each item
         var pyBuffer = new Sk.builtin.list(fa.data);
 
         var dtype = fa.descr;
@@ -1408,6 +1410,20 @@ var $builtinmodule = function (name) {
         }
     }
 
+    // utility functions to create a real copy of the underlying data
+    function PyArray_CopyBuffer(arr) {
+        var res = [];
+        var buffer = PyArray_DATA(arr);
+        var it = PyArray_IterNew(arr);
+
+        while (it.index < it.size) {
+            res.push(Sk.misceval.callsim(PyArray_DESCR(arr), buffer[it.dataptr]));
+            PyArray_ITER_NEXT(it);
+        }
+
+        return res;
+    }
+
     /*NUMPY_API
      * Numeric.matrixproduct(a,v)
      * just like inner product but does the swapaxes stuff on the fly
@@ -1543,7 +1559,7 @@ var $builtinmodule = function (name) {
         if (it2 == null) {
             return null;
         }
-        debugger;
+
         // it.dataptr is just the index to the current element (as we do not have C pointers in Javascript)
         var op_i = 0; // own helper for assinging the result with out passing a pointer to dot method
         var it1DeRefDataPtr; // reference to an array or subarray
@@ -1779,6 +1795,18 @@ var $builtinmodule = function (name) {
       }
     }
     return str;
+  }
+
+  function recursive_tolist(self, dataptr, startdim) {
+    var i;
+    var n;
+    var stride;
+    var ret;
+    var item;
+
+    if (startdim >= PyArray_NDIM(self)) {
+        return 
+    }
   }
 
   /*
@@ -2856,7 +2884,6 @@ var $builtinmodule = function (name) {
   **/
   var dot_f = function (a, b, o) {
     Sk.builtin.pyCheckArgs("dot", arguments, 2, 3);
-
     var o;
     var ret;
 

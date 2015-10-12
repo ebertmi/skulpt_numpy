@@ -2372,6 +2372,20 @@ var $builtinmodule = function (name) {
       return Sk.misceval.callsim(mod[CLASS_NDARRAY], shape, PyArray_DESCR(self), buffer);
     });
 
+    $loc.__abs__ = new Sk.builtin.func(function (self) {
+        Sk.builtin.pyCheckArgs("__abs__", arguments, 1, 1);
+        var _buffer = PyArray_DATA(self).map(function (value) {
+            return Sk.builtin.abs(value);
+        });
+
+        var shape = new Sk.builtin.tuple(PyArray_DIMS(self).map(function (x) {
+            return new Sk.builtin.int_(x);
+        }));
+
+        buffer = new Sk.builtin.list(_buffer);
+        return Sk.misceval.callsim(mod[CLASS_NDARRAY], shape, PyArray_DESCR(self), buffer);
+    });
+
     // reference: https://github.com/numpy/numpy/blob/41afcc3681d250f231aea9d9f428a9e197a47f6e/numpy/core/src/multiarray/shape.c#L692
     $loc.transpose = new Sk.builtin.func(function (self, args) {
         // http://docs.scipy.org/doc/numpy/reference/generated/numpy.ndarray.transpose.html
@@ -2830,6 +2844,22 @@ var $builtinmodule = function (name) {
   ];
   mod.full = new Sk.builtin.func(full_f);
 
+  var abs_f = function (x) {
+    Sk.builtin.pyCheckArgs("abs", arguments, 1, 1);
+    var ret;
+    if (PyArray_Check(x) == true) {
+        // call abs on each element of the array and return new array
+        // we need to call __abs__ on the ndarray
+        ret = Sk.misceval.callsim(x.__abs__, x);
+    } else {
+        // return abs for element by calling abs
+        ret = Sk.builtin.abs(x);
+    }
+
+    return ret;
+  };
+
+  mod.abs = new Sk.builtin.func(abs_f);
 
   /**
     Return a new array of given shape and type, filled with ones.

@@ -1908,13 +1908,14 @@ var $builtinmodule = function (name) {
                 return new Sk.builtin.list(PyArray_DATA(self));
             case 'T':
                 if (PyArray_NDIM(self) < 2) {
-                    return self;
+                    return self
                 } else {
                     return Sk.misceval.callsim(self.transpose, self);
                 }
             }
         }
 
+        debugger;
         // if we have not returned yet, try the genericgetattr
         return Sk.misceval.callsim(self.__getattribute__, self, name);
     });
@@ -2370,6 +2371,13 @@ var $builtinmodule = function (name) {
       }));
       buffer = new Sk.builtin.list(_buffer);
       return Sk.misceval.callsim(mod[CLASS_NDARRAY], shape, PyArray_DESCR(self), buffer);
+    });
+
+    $loc.dot = new Sk.builtin.func(function (self, other) {
+        var ret;
+        ret = Sk.misceval.callsim(mod.dot, self, other);
+
+        return ret;
     });
 
     $loc.__abs__ = new Sk.builtin.func(function (self) {

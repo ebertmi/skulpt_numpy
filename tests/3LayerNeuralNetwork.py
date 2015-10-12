@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.random as random
 
 def nonlin(x, deriv=False):
     if(deriv==True):
@@ -16,11 +17,11 @@ y = np.array([[0],
             [1],
             [0]])
 
-np.random.seed(1)
+random.seed(1)
 
 # randomly initialize our weights with mean 0
-syn0 = 2*np.random.random((3,4)) - 1
-syn1 = 2*np.random.random((4,1)) - 1
+syn0 = 2*random.random((3,4)) - 1
+syn1 = 2*random.random((4,1)) - 1
 
 for j in range(60000):
 

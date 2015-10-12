@@ -2860,6 +2860,7 @@ var $builtinmodule = function (name) {
   };
 
   mod.abs = new Sk.builtin.func(abs_f);
+  mod.absolute = mod.abs;
 
   /**
     Return a new array of given shape and type, filled with ones.

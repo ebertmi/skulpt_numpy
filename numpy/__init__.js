@@ -2862,6 +2862,37 @@ var $builtinmodule = function (name) {
   mod.abs = new Sk.builtin.func(abs_f);
   mod.absolute = mod.abs;
 
+ var mean_f = function (x) {
+    Sk.builtin.pyCheckArgs("mean", arguments, 1, 1);
+    var ret;
+    var sum = new Sk.builtin.float_(0.0); // initialised sum var
+    var mean;
+    var i = 0;
+    var _buffer;
+    var length;
+
+    // ToDo: check here for array like
+    // call PyArrayFromAny
+    if (PyArray_Check(x) == true) {
+        _buffer = PyArray_DATA(x);
+        length = Sk.builtin.len(x);
+
+        for (i = 0; i < length.v; i++) {
+            sum = Sk.abstr.numberBinOp(sum, _buffer[i], 'Add');
+        }
+
+        mean = Sk.abstr.numberBinOp(sum, length, 'Div');
+    } else {
+        // return abs for element by calling abs
+        mean = x
+    }
+
+    // call PyArray_Return
+    return mean;
+  };
+
+  mod.mean = new Sk.builtin.func(mean_f);
+
   /**
     Return a new array of given shape and type, filled with ones.
   **/

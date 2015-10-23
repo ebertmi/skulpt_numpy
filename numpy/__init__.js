@@ -722,7 +722,10 @@ var $builtinmodule = function (name) {
 
         flags = PyArray_FLAGS(ap);
 
-        ret = PyArray_NewFromDescr(Sk.builtin.type(ap), PyArray_DESCR(ap), n, PyArray_DIMS(ap), null, PyArray_DATA(ap), flags, ap);
+
+        // can we speed those things up?
+        // we add the data later on, first we create a new array with given dtype and strides, flags etc
+        ret = PyArray_NewFromDescr(Sk.builtin.type(ap), PyArray_DESCR(ap), n, PyArray_DIMS(ap), null, null, flags, ap);
         //var newBuffer = Sk.misceval.callsim(ret.tolist, ret);
         //ret.v.buffer = remapToJs_shallow(newBuffer, true);
         // fix the dimensions and strides of the return array
@@ -731,8 +734,11 @@ var $builtinmodule = function (name) {
             PyArray_STRIDES(ret)[i] = PyArray_STRIDES(ap)[permutation[i]];
         }
 
-        var list = Sk.misceval.callsim(ret.tolist, ret);
-        var newArray = Sk.misceval.callsim(mod.array, list);
+        //var list = tolist(ndarrayJs.buffer, ndarrayJs.shape, ndarrayJs.strides, ndarrayJs.dtype);
+        var newBuffer = tobufferrecursive(PyArray_DATA(ret), PyArray_DIMS(ret), PyArray_STRIDES(ret), PyArray_DESCR(ret));
+        ret.v.buffer = newBuffer;
+        // can we skip this call and just use the internal tolist?
+        //var newArray = Sk.misceval.callsim(mod.array, list);
         //     PyArray_UpdateFlags(ret, NPY_ARRAY_C_CONTIGUOUS | NPY_ARRAY_F_CONTIGUOUS |NPY_ARRAY_ALIGNED);
 
         return newArray;
@@ -1517,14 +1523,6 @@ var $builtinmodule = function (name) {
         /* Choose which subtype to return */
         ret = new_array_for_sum(ap1, ap2, out, nd, dimensions, typenum);
 
-        // create new empty array for given dimensions
-        var _shape = new Sk.builtin.tuple(dimensions.map(function(x) {
-            return new Sk.builtin.int_(x);
-        }));
-
-        // ToDo: CHANGE this to use new_array_for_sum!!!!
-        //ret = Sk.misceval.callsim(mod.zeros, _shape, typec);
-
         // Hint: the switch case function replaces the following lines
         //dot = PyArray_DESCR(ret)->f->dotfunc;
         //if (dot == NULL) {
@@ -1754,59 +1752,28 @@ var $builtinmodule = function (name) {
     return size;
   }
 
-  /**
-        Creates a string representation for given buffer and shape
-        buffer is an ndarray
-    **/
-  function stringify(buffer, shape, dtype) {
-    var emits = shape.map(function (x) {
-      return 0;
-    });
-    var uBound = shape.length - 1;
-    var idxLevel = 0;
-    var str = "[";
-    var i = 0;
-    while (idxLevel !== -1) {
-      if (emits[idxLevel] < shape[idxLevel]) {
-        if (emits[idxLevel] !== 0) {
-          str += ", ";
-        }
+  function tobufferrecursive(buffer, shape, strides, startdim, dtype) {
+    var i, n, stride;
+    var arr, item;
 
-        if (idxLevel < uBound) {
-            // add checks for line breaks
-            idxLevel += 1;
-            // ToDo!
-            if (shape[idxLevel] > 0 && idxLevel > 0 && i == shape[idxLevel]) {
-                str += "\n";
-            }
-            str += "[";
-        } else {
-            // ToDo: pass in precision?
-          str += Sk.ffi.remapToJs(Sk.builtin.str(buffer[i++]));
-          emits[idxLevel] += 1;
-        }
-      } else {
-        emits[idxLevel] = 0;
-        str += "]";
-        idxLevel -= 1;
-        if (idxLevel >= 0) {
-          emits[idxLevel] += 1;
-        }
-      }
+    /* Base case */
+    if (startdim >= shape.length) {
+        return buffer[0];
     }
-    return str;
-  }
 
-  function recursive_tolist(self, dataptr, startdim) {
-    var i;
-    var n;
-    var stride;
-    var ret;
-    var item;
+    n = shape[startdim];
+    stride = strides[startdim];
 
-    if (startdim >= PyArray_NDIM(self)) {
-        return 
+    arr = [];
+
+    for (i = 0; i < n; i++) {
+      item = tobufferrecursive(buffer, shape, strides, startdim + 1, dtype);
+      arr = arr.concat(item);
+
+      buffer = buffer.slice(stride);
     }
+
+    return arr
   }
 
   /*
@@ -1915,12 +1882,10 @@ var $builtinmodule = function (name) {
             }
         }
 
-        debugger;
         // if we have not returned yet, try the genericgetattr
         return Sk.misceval.callsim(self.__getattribute__, self, name);
     });
 
-    // ToDo: setAttribute should be implemented, change of shape causes resize
     // ndmin cannot be set, etc...
     $loc.__setattr__ = new Sk.builtin.func(function (self, name, value) {
         if (name != null && (Sk.builtin.checkString(name) || typeof name === "string")) {
@@ -1935,7 +1900,6 @@ var $builtinmodule = function (name) {
                 case 'shape':
                     // trigger reshape;
                     var js_shape = PyArray_UNPACK_SHAPE(self, value);
-                    // ToDo: figure if we need to do this?
                     self.v.strides = computeStrides(js_shape);
                     self.v.shape = js_shape;
                     return;
@@ -1953,11 +1917,10 @@ var $builtinmodule = function (name) {
       converted to the nearest compatible Python type.
     */
     $loc.tolist = new Sk.builtin.func(function (self) {
-      var ndarrayJs = Sk.ffi.remapToJs(self);
-      var list = tolist(ndarrayJs.buffer, ndarrayJs.shape, ndarrayJs.strides,
-        ndarrayJs.dtype);
+        var ndarrayJs = Sk.ffi.remapToJs(self);
+        var list = tolist(ndarrayJs.buffer, ndarrayJs.shape, ndarrayJs.strides, ndarrayJs.dtype);
 
-      return list;
+        return list;
     });
 
     $loc.reshape = new Sk.builtin.func(function (self, shape, order) {
@@ -2770,6 +2733,15 @@ var $builtinmodule = function (name) {
     'C'), false, new Sk.builtin.int_(0)];
   mod.array = new Sk.builtin.func(array_f);
 
+    var asanyarray_f = function (a, dtype, order) {
+        //array(a, dtype, copy=False, order=order, subok=True)
+        return Sk.misceval.callsim(mod.array, dtype, Sk.builtin.bool.false$, order);
+    };
+
+    mod.asanyarray = new Sk.builtin.func(asanyarray_f);
+    asanyarray_f.co_varnames = ['a', 'dtype', 'order'];
+    asanyarray_f.$defaults = [null, Sk.builtin.none.none$, Sk.builtin.none.none$];
+
   /**
     Return a new array of given shape and type, filled with zeros.
   **/
@@ -2870,7 +2842,7 @@ var $builtinmodule = function (name) {
   mod.abs = new Sk.builtin.func(abs_f);
   mod.absolute = mod.abs;
 
- var mean_f = function (x) {
+ var mean_f = function (x, axis, dtype, out, keepdims) {
     Sk.builtin.pyCheckArgs("mean", arguments, 1, 1);
     var ret;
     var sum = new Sk.builtin.float_(0.0); // initialised sum var
@@ -2878,6 +2850,18 @@ var $builtinmodule = function (name) {
     var i = 0;
     var _buffer;
     var length;
+
+    if (axis != null || !Sk.builtin.checkNone(axis)) {
+        throw new Sk.builtin.NotImplementedError("the 'axis' parameter is currently not supported");
+    }
+
+    if (out != null || !Sk.builtin.checkNone(out)) {
+        throw new Sk.builtin.NotImplementedError("the 'out' parameter is currently not supported");
+    }
+
+    if (keepdims != null || keepdims != Sk.builtin.bool.false$) {
+        throw new Sk.builtin.NotImplementedError("the 'keepdims' parameter is currently not supported");
+    }
 
     // ToDo: check here for array like
     // call PyArrayFromAny
@@ -2895,10 +2879,16 @@ var $builtinmodule = function (name) {
         mean = x
     }
 
+    // apply dtype casting
+    if (dtype != null && !Sk.builtin.checkNone(dtype)) {
+        mean = Sk.misceval.callsim(dtype, mean);
+    }
+
     // call PyArray_Return
     return mean;
   };
-
+  mean_f.co_varnames = ['a', 'axis', 'dtype', 'out', 'keepdims'];
+  mean_f.$defaults = [null, Sk.builtin.none.none$, Sk.builtin.none.none$, Sk.builtin.none.none$, Sk.builtin.bool.false$];
   mod.mean = new Sk.builtin.func(mean_f);
 
   /**

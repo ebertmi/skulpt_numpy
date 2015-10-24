@@ -922,6 +922,18 @@ var $builtinmodule = function(name) {
         js_randint.$defaults = [Sk.builtin.none.none$, Sk.builtin.none.none$, Sk.builtin.none.none$];
         $loc.randint = new Sk.builtin.func(js_randint);
 
+        var js_random_integers = function(self, low, high, size) {
+            if (high == null || Sk.builtin.checkNone(high)) {
+                high = low;
+                low = new Sk.builtin.int_(1);
+            }
+
+            return Sk.misceval.callsim(self.randint, self, low, sum = Sk.abstr.numberBinOp(high, new Sk.builtin.int_(1), 'Add'), size);
+        };
+        js_random_integers.co_varnames = ['self', 'low', 'high', 'size'];
+        js_random_integers.$defaults = [Sk.builtin.none.none$, Sk.builtin.none.none$, Sk.builtin.none.none$];
+        $loc.random_integers = new Sk.builtin.func(js_random_integers);
+
         $loc.rand = new Sk.builtin.func(function(self) {
             // get *args
             args = new Sk.builtins.tuple(Array.prototype.slice.call(arguments, 1));
@@ -1030,6 +1042,7 @@ var $builtinmodule = function(name) {
     mod.sample = mod.random_sample;
     mod.binomial = Sk.abstr.gattr(mod._rand, 'binomial', true);
     mod.randint = Sk.abstr.gattr(mod._rand, 'randint', true);
+    mod.random_integers = Sk.abstr.gattr(mod._rand, 'random_integers', true);
 
 
     return mod;

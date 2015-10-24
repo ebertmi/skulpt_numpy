@@ -735,13 +735,13 @@ var $builtinmodule = function (name) {
         }
 
         //var list = tolist(ndarrayJs.buffer, ndarrayJs.shape, ndarrayJs.strides, ndarrayJs.dtype);
-        var newBuffer = tobufferrecursive(PyArray_DATA(ret), PyArray_DIMS(ret), PyArray_STRIDES(ret), PyArray_DESCR(ret));
+        var newBuffer = tobufferrecursive(PyArray_DATA(ap), PyArray_DIMS(ret), PyArray_STRIDES(ret), 0, PyArray_DESCR(ret));
         ret.v.buffer = newBuffer;
         // can we skip this call and just use the internal tolist?
         //var newArray = Sk.misceval.callsim(mod.array, list);
         //     PyArray_UpdateFlags(ret, NPY_ARRAY_C_CONTIGUOUS | NPY_ARRAY_F_CONTIGUOUS |NPY_ARRAY_ALIGNED);
 
-        return newArray;
+        return ret;
     }
 
     // OBJECT_dot is the method used for python types
@@ -2321,6 +2321,31 @@ var $builtinmodule = function (name) {
     $loc.__pos__ = new Sk.builtin.func(makeUnaryOp("UAdd"));
     $loc.__neg__ = new Sk.builtin.func(makeUnaryOp("USub"));
 
+    // logical compare functions
+    $loc.__eq__ = new Sk.builtin.func(function (self, other) {
+        return Sk.misceval.callsim(mod.equal, self, other);
+    });
+
+    $loc.__ne__ = new Sk.builtin.func(function (self, other) {
+        return Sk.misceval.callsim(mod.not_equal, self, other);
+    });
+
+    $loc.__lt__ = new Sk.builtin.func(function (self, other) {
+        return Sk.misceval.callsim(mod.less, self, other);
+    });
+
+    $loc.__le__ = new Sk.builtin.func(function (self, other) {
+        return Sk.misceval.callsim(mod.less_equal, self, other);
+    });
+
+    $loc.__gt__ = new Sk.builtin.func(function (self, other) {
+        return Sk.misceval.callsim(mod.greater, self, other);
+    });
+
+    $loc.__ge__ = new Sk.builtin.func(function (self, other) {
+        return Sk.misceval.callsim(mod.greater_equal, self, other);
+    });
+
     /**
      Simple pow implementation that faciliates the pow builtin
     **/
@@ -2383,6 +2408,14 @@ var $builtinmodule = function (name) {
         }
 
         return ret;
+    });
+
+    $loc.any = new Sk.builtin.func(function (self, axis, out) {
+        return Sk.misceval.callsim(mod.any, self, axis, out);
+    });
+
+    $loc.all = new Sk.builtin.func(function (self, axis, out) {
+        return Sk.misceval.callsim(mod.all, self, axis, out);
     });
 
     // end of ndarray_f
@@ -3048,6 +3081,192 @@ var $builtinmodule = function (name) {
         return PyArray_Return(ret);
   }
   mod.vdot = new Sk.builtin.func(vdot_f);
+
+  var any_f = function(a, axis, out, keepdims) {
+    Sk.builtin.pyCheckArgs("any", arguments, 1, 4, false);
+    var arr = PyArray_FromAny(a);
+    var data = PyArray_DATA(arr);
+    var i;
+    var b;
+
+    if (axis != undefined && !Sk.builtin.checkNone(axis)) {
+        throw new ValueError('"axis" parameter not supported');
+    }
+
+    if (out != undefined  && !Sk.builtin.checkNone(out)) {
+        throw new ValueError('"out" parameter not supported');
+    }
+
+    // iterate over all items and compare
+    for (i = 0; i < data.length; i++) {
+        b = Sk.builtin.bool(data[i]);
+        if (b == Sk.builtin.bool.true$) {
+            return Sk.builtin.bool.true$;
+        }
+    }
+
+    return Sk.builtin.bool.false$;;
+  };
+  any_f.co_varnames = ['a', 'axis', 'out', 'keepdims'];
+  any_f.$defaults = [Sk.builtin.none.none$,
+    Sk.builtin.none.none$, Sk.builtin.bool.false$
+  ];
+  mod.any = new Sk.builtin.func(any_f);
+
+  var all_f = function(a, axis, out, keepdims) {
+    Sk.builtin.pyCheckArgs("all", arguments, 1, 4, false);
+    var arr = PyArray_FromAny(a);
+    var data = PyArray_DATA(arr);
+    var i;
+    var b;
+
+    if (axis != undefined && !Sk.builtin.checkNone(axis)) {
+        throw new ValueError('"axis" parameter not supported');
+    }
+
+    if (out != undefined  && !Sk.builtin.checkNone(out)) {
+        throw new ValueError('"out" parameter not supported');
+    }
+
+    // iterate over all items and compare
+    for (i = 0; i < data.length; i++) {
+        b = Sk.builtin.bool(data[i]);
+        if (b == Sk.builtin.bool.false$) {
+            return Sk.builtin.bool.false$;
+        }
+    }
+
+    return Sk.builtin.bool.true$;;
+  };
+  all_f.co_varnames = ['a', 'axis', 'out', 'keepdims'];
+  all_f.$defaults = [Sk.builtin.none.none$,
+    Sk.builtin.none.none$, Sk.builtin.bool.false$
+  ];
+  mod.all = new Sk.builtin.func(all_f);
+
+  function compareLogical(binOp, x1, x2, out) {
+    var a1 = PyArray_FromAny(x1);
+    var a2 = PyArray_FromAny(x2);
+    var data1 = PyArray_DATA(a1);
+    var data2 = PyArray_DATA(a2);
+    var buf = [];
+    var ret;
+    var shape;
+    
+    // hack due to the absence of iter and array broadcasting here
+    if (!PyArray_Check(x1) && !Sk.builtin.checkSequence(x1) && !PyArray_Check(x2) && !Sk.builtin.checkSequence(x2)) {
+        return Sk.builtin.bool(Sk.misceval.richCompareBool(x1, x2, binOp))
+    }
+
+    // check shape
+    if (PyArray_SIZE(a1) !== PyArray_SIZE(a2)) {
+        // try to make arrays bigger
+        if (PyArray_SIZE(a1) === 1) {
+            // fill a1 to match a2
+            var val = data1[0];
+            var i;
+            for (i = 1; i < PyArray_SIZE(a2); i++) {
+                data1.push(val);
+            }
+            shape = PyArray_DIMS(a2);
+        } else if (PyArray_SIZE(a2) === 1) {
+            // fill a1 to match a2
+            var val = data2[0];
+            var i;
+            for (i = 1; i < PyArray_SIZE(a1); i++) {
+                data2.push(val);
+            }
+            shape = PyArray_DIMS(a1);
+        } else {
+            throw new Sk.builtin.ValueError("operands could not be broadcast together with shapes");
+        }
+    } else {
+        // same shape prod size
+        // return shape of first elem
+        shape = PyArray_DIMS(a1);
+    }
+
+    if (out != undefined  && !Sk.builtin.checkNone(out)) {
+        throw new ValueError('"out" parameter not supported');
+    }
+
+    // iterate over all items and compare
+    for (i = 0; i < data1.length; i++) {
+        // TODO!
+        // should use iterators!
+        // but for iterators we would need to have shape broadcasting!
+        buf.push(Sk.builtin.bool(Sk.misceval.richCompareBool(data1[i], data2[i], binOp)));
+    }
+
+    // ToDo: pass in correct shape or set it afterwards
+    ret = PyArray_FromAny(new Sk.builtin.list(buf));
+    ret = PyArray_NewShape(ret, shape, null); // reshape to match the broadcasting behavior
+
+    return PyArray_Return(ret);
+  }
+
+  /**
+   * Basic impl. of the comparison function due to the lack of real shape broadcasting
+   */
+  var less_f = function(x1, x2, out) {
+    Sk.builtin.pyCheckArgs("less", arguments, 2, 3, false);
+    return compareLogical('Lt', x1, x2, out);
+  };
+  less_f.co_varnames = ['a', 'axis', 'out', 'keepdims'];
+  less_f.$defaults = [Sk.builtin.none.none$,
+    Sk.builtin.none.none$, Sk.builtin.bool.false$
+  ];
+  mod.less = new Sk.builtin.func(less_f);
+
+  var less_equal_f = function(x1, x2, out) {
+    Sk.builtin.pyCheckArgs("less_equal", arguments, 2, 3, false);
+    return compareLogical('LtE', x1, x2, out);
+  };
+  less_equal_f.co_varnames = ['a', 'axis', 'out', 'keepdims'];
+  less_equal_f.$defaults = [Sk.builtin.none.none$,
+    Sk.builtin.none.none$, Sk.builtin.bool.false$
+  ];
+  mod.less_equal = new Sk.builtin.func(less_equal_f);
+
+  var greater_f = function(x1, x2, out) {
+    Sk.builtin.pyCheckArgs("greater", arguments, 2, 3, false);
+    return compareLogical('Gt', x1, x2, out);
+  };
+  greater_f.co_varnames = ['a', 'axis', 'out', 'keepdims'];
+  greater_f.$defaults = [Sk.builtin.none.none$,
+    Sk.builtin.none.none$, Sk.builtin.bool.false$
+  ];
+  mod.greater = new Sk.builtin.func(greater_f);
+
+  var greater_equal_f = function(x1, x2, out) {
+    Sk.builtin.pyCheckArgs("greater_equal", arguments, 2, 3, false);
+    return compareLogical('GtE', x1, x2, out);
+  };
+  greater_equal_f.co_varnames = ['a', 'axis', 'out', 'keepdims'];
+  greater_equal_f.$defaults = [Sk.builtin.none.none$,
+    Sk.builtin.none.none$, Sk.builtin.bool.false$
+  ];
+  mod.greater_equal = new Sk.builtin.func(greater_equal_f);
+
+  var equal_f = function(x1, x2, out) {
+    Sk.builtin.pyCheckArgs("equal", arguments, 2, 3, false);
+    return compareLogical('Eq', x1, x2, out);
+  };
+  equal_f.co_varnames = ['a', 'axis', 'out', 'keepdims'];
+  equal_f.$defaults = [Sk.builtin.none.none$,
+    Sk.builtin.none.none$, Sk.builtin.bool.false$
+  ];
+  mod.equal = new Sk.builtin.func(equal_f);
+
+  var not_equal_f = function(x1, x2, out) {
+    Sk.builtin.pyCheckArgs("not_equal", arguments, 2, 3, false);
+    return compareLogical('NotEq', x1, x2, out);
+  };
+  not_equal_f.co_varnames = ['a', 'axis', 'out', 'keepdims'];
+  not_equal_f.$defaults = [Sk.builtin.none.none$,
+    Sk.builtin.none.none$, Sk.builtin.bool.false$
+  ];
+  mod.not_equal = new Sk.builtin.func(not_equal_f);
 
   /* not implemented methods */
   mod.ones_like = new Sk.builtin.func(function () {

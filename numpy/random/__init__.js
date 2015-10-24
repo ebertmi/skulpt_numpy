@@ -6,7 +6,7 @@
 
 var RK_STATE_LEN = 624;
 
-function createRkState(key, pos, has_gauss, has_binominal, psave, nsave, r, q, fm, m, p1, xm, xl, xr, laml, lamr, p2, p3, p4) {
+function createRkState(key, pos, has_gauss, has_binomial, psave, nsave, r, q, fm, m, p1, xm, xl, xr, laml, lamr, p2, p3, p4) {
     return {
         key: key || new Array(RK_STATE_LEN),
         pos: pos || null,
@@ -18,7 +18,7 @@ function createRkState(key, pos, has_gauss, has_binominal, psave, nsave, r, q, f
          * are different than nsave and psave, then the other parameters will be
          * recomputed. RTK 2005-09-02 */
 
-        has_binominal: has_binominal || null, /* !=0 following parameters initialized for binomial */
+        has_binomial: has_binomial || null, /* !=0 following parameters initialized for binomial */
 
         psave: psave || null,
         nsave: nsave || null,
@@ -384,6 +384,234 @@ function init_by_array(self, init_key, key_length) {
     self.has_binomial = 0;
 }
 
+function rk_binomial_btpe(state, n, p) {
+    var r, q, fm, p1, xm, xl, xr, c, laml, lamr, p2, p3, p4;
+    var a, u, v, s, F, rho, t, A, nrq, x1, x2, f1, f2, z, z2, w, w2, x;
+    var m, y, k, i;
+
+    if (!(state.binomial) || (state.nsave != n) || (state.psave != p)) {
+        // initialize
+        state.nsave = n;
+        state.psave = p;
+        state.has_binomial = 1;
+        state.r = r = Math.min(p, 1.0 - p);
+        state.q = q = 1.0 - r;
+        state.fm = fm = n * r + r;
+        state.m = m = Math.floor(state.fm);
+        state.p1 = p1 = Math.floor(2.195 * Math.sqrt(n * r * q) - 4.6 * q) + 0.5;
+        state.xm = xm = m + 0.5;
+        state.xl = xl = xm - p1;
+        state.xr = xr = xm + p1;
+        state.c = c = 0.134 + 20.5 / (15.3 + m);
+        a = (fm - xl) / (fm - xl * r);
+        state.laml = laml = a * (1.0 + a / 2.0);
+        a = (xr - fm) / (xr * q);
+        state.lamr = lamr = a * (1.0 + a / 2.0);
+        state.p2 = p2 = p1 * (1.0 + 2.0 * c);
+        state.p3 = p3 = p2 + c / laml;
+        state.p4 = p4 = p3 + c / lamr;
+    } else {
+        r = state.r;
+        q = state.q;
+        fm = state.fm;
+        m = state.m;
+        p1 = state.p1;
+        xm = state.xm;
+        xl = state.xl;
+        xr = state.xr;
+        c = state.c;
+        laml = state.laml;
+        lamr = state.lamr;
+        p2 = state.p2;
+        p3 = state.p3;
+        p4 = state.p4;
+    }
+
+    // use while loop with case statement
+    var goto_label = 'Step10';
+    goto_loop: while (goto_label) {
+        switch (goto_label) {
+        case 'Step10':
+            nrq = n * r * q;
+            goto_label = 'foo';
+            u = rk_double(state) * p4;
+            v = rk_double(state);
+            if (u > p1) {
+                goto_label = 'Step20';
+                continue goto_loop;
+            }
+            goto_label = 'Step60';
+            continue goto_loop;
+        case 'Step20':
+            if (u > p2) {
+                goto_label = 'Step30';
+                continue goto_loop;
+            }
+
+            x = xl + (u - p1) / c;
+            v = v * c + 1.0 - Math.abs(m - x + 0.5) / p1;
+            if (v > 1.0) {
+                goto_label = 'Step10';
+                continue goto_loop;
+            }
+            y = Math.floor(x);
+            goto_label = 'Step50';
+            continue goto_loop;
+        case 'Step30':
+            if (u > p3) {
+                goto_label = 'Step40';
+                continue goto_loop;
+            }
+            y = Math.floor(xl + Math.log(v) / laml);
+            if (y < 0) {
+                goto_label = 'Step10';
+                continue goto_loop;
+            }
+            v = v * (u - p2) * laml;
+            goto_label = 'Step50';
+            continue goto_loop;
+        case 'Step40':
+            y = Math.floor(xr - Math.log(v) / lamr);
+            if (y > n) {
+                goto_label = 'Step10';
+                continue goto_loop;
+            }
+            v = v * (u - p3) * lamr;
+            // case fallthrough as in L335
+        case 'Step50':
+            k = Math.abs(y - m);
+            if ((k > 20) && (k < ((nrq) / 2.0 - 1))) {
+                goto_label = 'Step52';
+                continue goto_loop;
+            }
+            s = r / q;
+            a = s * (n + 1);
+            F = 1.0;
+            if (m < y) {
+                for (i = m + 1; i <= y; i++) {
+                    F *= (a / i - s);
+                }
+            } else if (m > y) {
+                for (i = y + 1; i <= m; i++) {
+                    F /= (a / i - s);
+                }
+            }
+            if (v > F) {
+                goto_label = 'Step10';
+                continue goto_loop;
+            }
+            goto_label = 'Step60';
+            continue goto_loop;
+        case 'Step52':
+            rho = (k / (nrq)) * ((k * (k / 3.0 + 0.625) + 0.16666666666666666) / nrq + 0.5);
+            t = -k * k / (2 * nrq);
+            A = Math.log(v);
+            if (A < (t - rho)) {
+                goto_label = 'Step60';
+                continue goto_loop;
+            }
+            if (A > (t + rho)) {
+                goto_label = 'Step10';
+                continue goto_loop;
+            }
+
+            x1 = y + 1;
+            f1 = m + 1;
+            z = n + 1 - m;
+            w = n - y + 1;
+            x2 = x1 * x1;
+            f2 = f1 * f1;
+            z2 = z * z;
+            w2 = w * w;
+            if (A > (xm * log(f1 / x1)
+                   + (n - m + 0.5) * Math.log(z / w)
+                   + (y - m) * Math.log(w * r / (x1 * q))
+                   + (13680.0 - (462.0 - (132.0 - (99.0 - 140.0 / f2) / f2) / f2) / f2) / f1 / 166320.0
+                   + (13680.0 - (462.0 - (132.0 - (99.0 - 140.0 / z2) / z2) / z2) / z2) / z / 166320.0
+                   + (13680.0 - (462.0 - (132.0 - (99.0 - 140.0 / x2) / x2) / x2) / x2) / x1 / 166320.0
+                   + (13680.0 - (462.0 - (132.0 - (99.0 - 140.0 / w2) / w2) / w2) / w2) / w / 166320.0)) {
+                goto_label = 'Step10';
+                continue goto_loop;
+            }
+            // case fallthrough like in L386
+        case 'Step60':
+            if (p > 0.5) {
+                y = n - y;
+            }
+            goto_label = false;
+            break;
+        default:
+            console.log("unhandeled case: " + goto_label);
+            break;
+        }
+    }
+
+    return y;
+}
+
+function rk_binomial_inversion(state, n, p) {
+    var q;
+    var qn;
+    var np;
+    var px;
+    var U;
+    var X;
+    var bound;
+
+    if (!(state.has_binomial) ||
+         (state.nsave != n) ||
+         (state.psave != p)) {
+        state.save = n;
+        state.psave = p;
+        state.has_binomial = 1;
+        state.q = q = 1.0 - p;
+        state.r = qn = exp(n * log(q));
+        state.c = np = n * p;
+        state.m = bound = Math.min(n, np + 10.0 * Math.sqrt(np * q + 1));
+    } else {
+        q = state.q;
+        qn = state.r;
+        np = state.c;
+        bound = state.m;
+    }
+
+    X = 0;
+    px = qn;
+    U = rk_double(state);
+    while (U > px) {
+        X++;
+        if (X > bound) {
+            X = 0;
+            px = qn;
+            U = rk_double(state);
+        } else {
+            U -= px;
+            px  = ((n - X + 1) * p * px) / (X * q);
+        }
+    }
+
+    return X;
+}
+
+function rk_binomial(state, n, p) {
+    var q;
+
+    if (p <= 0.5) {
+        if (p * n >= 30.0) {
+            return rk_binomial_inverion(state, n, p);
+        } else {
+            return rk_binomial_btpe(state, n, p);
+        }
+    } else {
+        q = 1.0 - p;
+        if (q * n >= 30.0) {
+            return n - rk_binomial_inverions(state, n, q);
+        } else {
+            return n - rk_binomial_btpe(state, n, q);
+        }
+    }
+}
+
 /* eslint-disable camelcase, comma-dangle, no-underscore-dangle, strict */
 /* ****************************************************************************/
 /* Base numpy.random module entry,                                            */
@@ -432,6 +660,40 @@ function cont0_array(state, func, size, lock) {
 
 function cont1_array_sc(state, func, size, a, lock) {
     // not implemented
+}
+
+// TODO:
+function discnp_array_sc(state, func, size, n, p, lock) {
+    var array_data = [];
+    var array;
+    var length;
+    var i;
+    var jsn = Sk.ffi.remapToJs(n);
+    var jsp = Sk.ffi.remapToJs(p);
+
+    if (Sk.builtin.checkNone(size)) {
+        return new Sk.builtin.int_(func(state, jsn, jsp));
+    } else {
+        array = Sk.misceval.callsim(np.$d.empty, size, Sk.builtin.int_);
+        length = Sk.builtin.len(array).v;
+        array_data = array.v.buffer;
+
+        for (i = 0; i < length; i++) {
+            array_data[i] = new Sk.builtin.int_(func(state, jsn, jsp));
+        }
+
+        return array;
+    }
+}
+
+// https://github.com/numpy/numpy/blob/master/numpy/random/mtrand/mtrand.pyx#L356
+function discnp_array() {
+
+}
+
+function PyArray_FROM_OTF(m, type, flags) {
+    // ToDo: pass in the flags if available
+    return Sk.misceval.callsim(np.$d.array, m, type);
 }
 
 /**
@@ -583,7 +845,7 @@ var $builtinmodule = function(name) {
             if (size == null) {
                 size = Sk.builtin.none.none$;
             }
-            debugger;
+
             var py_res = cont0_array(self.internal_state, rk_double, size, self.lock);
 
             return py_res;
@@ -623,6 +885,55 @@ var $builtinmodule = function(name) {
 
             return Sk.misceval.callsim(self.random_sample, self, args);
         });
+
+        // binomial: mtrand.pyx:L3587
+        var js_binomial = function(self, n, p, size) {
+            Sk.builtin.pyCheckArgs("binomial", arguments, 2, 3, true);
+            var on; // ndarray
+            var op; // ndarray
+            var ln; // long
+            var fp; // double
+
+            var ex = null;
+            try {
+                fp = Sk.ffi.remapToJs(new Sk.builtin.float_(p));
+                ln = Sk.ffi.remapToJs(new Sk.builtin.int_(n));
+            } catch(e) {
+                ex = e;
+            }
+
+            // check if the conversion was successful
+            if (ex === null) {
+                if (ln < 0) {
+                    throw new Sk.builtin.ValueError("n < 0");
+                }
+                if (fp < 0) {
+                    throw new Sk.builtin.ValueError("p < 0");
+                } else if (fp > 1) {
+                    throw new Sk.builtin.ValueError("p > 1");
+                } else if (isNaN(fp)) {
+                    throw new Sk.builtin.ValueError("p is nan");
+                }
+
+                return discnp_array_sc(self.internal_state, rk_binomial, size, ln, fp, self.lock);
+            }
+
+            // we may have to deal with arrays
+            on = PyArray_FROM_OTF(n, Sk.builtin.int_);
+            op = PyArray_FROM_OTF(p, Sk.builtin.float_);
+
+            if (Sk.misceval.callsim(np.$d.any, Sk.misceval.callsim(np.$d.less, n, new Sk.builtin_int(0))) == sk.builtin.bool.true$) {
+                throw new Sk.builtin.ValueError("n < 0");
+            }
+            if (Sk.misceval.callsim(np.$d.any, Sk.misceval.callsim(np.$d.less, p, new Sk.builtin_int(0))) == sk.builtin.bool.true$) {
+                throw new Sk.builtin.ValueError("p < 0");
+            }
+            if (Sk.misceval.callsim(np.$d.any, Sk.misceval.callsim(np.$d.greater, p, new Sk.builtin_int(1))) == sk.builtin.bool.true$) {
+                throw new Sk.builtin.ValueError("p > 1");
+            }
+            return discnp_array(self.internal_state, rk_binomial, size, on, op, self.lock);
+        };
+        $loc.binomial = new Sk.builtin.func(js_binomial);
 
         var js_bytes = function(self, length) {
             throw new NotImplementedError('RandomState.bytes');

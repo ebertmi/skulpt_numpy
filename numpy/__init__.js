@@ -2954,7 +2954,7 @@ var $builtinmodule = function (name) {
   var empty_f = function (shape, dtype, order) {
     Sk.builtin.pyCheckArgs("empty", arguments, 1, 3);
 
-    if(!Sk.builtin.checkSequence(shape) && !Sk.builtin.checkInt(shape)) {
+    if (!Sk.builtin.checkSequence(shape) && !Sk.builtin.checkInt(shape)) {
       throw new Sk.builtin.TypeError('argument "shape" must int or sequence of ints');
     }
 

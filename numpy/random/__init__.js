@@ -870,10 +870,56 @@ var $builtinmodule = function(name) {
         then results are from [0, `low`).
         */
         var js_randint = function(self, low, high, size) {
-            throw new NotImplementedError('RandomState.randint');
+            Sk.builtin.pyCheckArgs("randint", arguments, 1, 3, true);
+            if (size == null) {
+                size = Sk.builtin.none.none$;
+            }
+
+            var lo;
+            var hi;
+            var rv;
+            var diff;
+            var array_data = [];
+            var array;
+            var length;
+            var i;
+
+            if (high == null || Sk.builtin.checkNone(high)) {
+                lo = new Sk.builtin.int_(0);
+                hi = new Sk.builtin.int_(low);
+            } else {
+                lo = new Sk.builtin.int_(low);
+                hi = new Sk.builtin.int_(high);
+            }
+
+            lo = Sk.ffi.remapToJs(lo);
+            hi = Sk.ffi.remapToJs(hi);
+
+            if (lo >= hi) {
+                throw new Sk.builtin.ValueError("low >= high");
+            }
+
+            diff = Math.abs(hi - lo - 1);
+
+            if (Sk.builtin.checkNone(size)) {
+                rv = new Sk.builtin.int_(lo + rk_interval(diff, self.internal_state));
+                return rv;
+            } else {
+                array = Sk.misceval.callsim(np.$d.empty, size, Sk.builtin.int_);
+                length = Sk.builtin.len(array).v; // get size
+                array_data = array.v.buffer;
+
+                for (i = 0; i < length; i++) {
+                    rv = lo + rk_interval(diff, self.internal_state);
+                    // ToDo: do we need some casting here?
+                    array_data[i] = new Sk.builtin.int_(rv);
+                }
+
+                return array;
+            }
         };
         js_randint.co_varnames = ['self', 'low', 'high', 'size'];
-        js_randint.$defaults = [null, Sk.builtin.none.none$, Sk.builtin.none.none$];
+        js_randint.$defaults = [Sk.builtin.none.none$, Sk.builtin.none.none$, Sk.builtin.none.none$];
         $loc.randint = new Sk.builtin.func(js_randint);
 
         $loc.rand = new Sk.builtin.func(function(self) {
@@ -893,6 +939,10 @@ var $builtinmodule = function(name) {
             var op; // ndarray
             var ln; // long
             var fp; // double
+
+            if (size == null) {
+                size = Sk.builtin.none.none$;
+            }
 
             var ex = null;
             try {
@@ -914,7 +964,7 @@ var $builtinmodule = function(name) {
                 } else if (isNaN(fp)) {
                     throw new Sk.builtin.ValueError("p is nan");
                 }
-
+                debugger;
                 return discnp_array_sc(self.internal_state, rk_binomial, size, ln, fp, self.lock);
             }
 
@@ -978,6 +1028,8 @@ var $builtinmodule = function(name) {
     mod.random_sample = Sk.abstr.gattr(mod._rand, 'random_sample', true);
     mod.random = mod.random_sample;
     mod.sample = mod.random_sample;
+    mod.binomial = Sk.abstr.gattr(mod._rand, 'binomial', true);
+    mod.randint = Sk.abstr.gattr(mod._rand, 'randint', true);
 
 
     return mod;

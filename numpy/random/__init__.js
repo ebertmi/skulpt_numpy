@@ -595,9 +595,8 @@ function rk_binomial_inversion(state, n, p) {
 
 function rk_binomial(state, n, p) {
     var q;
-
     if (p <= 0.5) {
-        if (p * n >= 30.0) {
+        if (p * n <= 30.0) {
             return rk_binomial_inversion(state, n, p);
         } else {
             return rk_binomial_btpe(state, n, p);
@@ -704,7 +703,6 @@ var $builtinmodule = function(name) {
 
     var randomState_c = function($gbl, $loc) {
         var js__init__ = function(self, seed) {
-            //debugger;
             if (seed == null) {
                 seed = Sk.builtin.none.none$;
             }
@@ -976,7 +974,6 @@ var $builtinmodule = function(name) {
                 } else if (isNaN(fp)) {
                     throw new Sk.builtin.ValueError("p is nan");
                 }
-                debugger;
                 return discnp_array_sc(self.internal_state, rk_binomial, size, ln, fp, self.lock);
             }
 

@@ -1,9 +1,29 @@
 /* eslint-disable camelcase, no-eq-null, comma-dangle, no-underscore-dangle, strict, new-cap, no-var, vars-on-top, no-param-reassign, func-names */
+/**
+ * This may be removed after the PR #518 has been merged
+ */
+Sk.misceval.tryCatch = Sk.misceval.tryCatch || function(tryFn, catchFn) {
+    var r;
+
+    try {
+        r = tryFn();
+    } catch(e) {
+        return catchFn(e);
+    }
+
+    if (r instanceof Sk.misceval.Suspension) {
+        var susp = new Sk.misceval.Suspension(undefined, r);
+        susp.resume = function() { return Sk.misceval.tryCatch(r.resume, catchFn); };
+        return susp;
+    } else {
+        return r;
+    }
+};
+
 /* ****************************************************************************/
 /*                                  RandomKit                                 */
 /*                                                                            */
 /* ****************************************************************************/
-
 var RK_STATE_LEN = 624;
 
 function createRkState(key, pos, has_gauss, has_binomial, psave, nsave, r, q, fm, m, p1, xm, xl, xr, laml, lamr, p2, p3, p4) {
@@ -686,8 +706,70 @@ function discnp_array_sc(state, func, size, n, p, lock) {
 }
 
 // https://github.com/numpy/numpy/blob/master/numpy/random/mtrand/mtrand.pyx#L356
-function discnp_array() {
+function discnp_array(state, func, size, on, op, lock) {
+    var array_data = [];
+    var array;
+    var length;
+    var i;
+    var op_data;
+    var on_data;
+    var multi; // broadcast
+    var on1;
+    var op1;
 
+    if (Sk.builtin.checkNone(size)) {
+        multi = null; // ToDo: MultiIter is not supported
+        var py_shape = new Sk.builtin.tuple(on.v.shape.map(
+            function(x) {
+                return new Sk.builtin.int_(x);
+            }));
+
+        array = Sk.misceval.callsim(np.$d.empty, py_shape, Sk.builtin.int_);
+        array_data = array.v.buffer; // ToDo: use PyArray_DATA
+
+        // broadcast arrays
+        on1 = on.v.buffer;
+        op1 = op.v.buffer;
+
+        if (op1.length !== on1.length) {
+            if (op1.length === 1) {
+                for (i = 1; i < on1.length; i++) {
+                    op1.push(op1[0]);
+                }
+            } else if (on1.length === 1) {
+                for (i = 1; i < op1.length; i++) {
+                    on1.push(on1[0]);
+                }                
+            } else {
+                throw new Sk.builtin.ValueError("cannot broadcast n and p to a common shape");
+            }
+        }
+
+        for (i = 0; i < array_data.length; i++) {
+            on_data = Sk.ffi.remapToJs(on1[i]);
+            op_data = Sk.ffi.remapToJs(op1[i]);
+            array_data[i] = new Sk.builtin.int_(func(state, on_data, op_data));
+        }
+    } else {
+        array = Sk.misceval.callsim(np.$d.empty, size, Sk.builtin.int_);
+        array_data = array.v.buffer; // PyArray_DATA() TODO
+        // multi = PyArray_MultiIterNew(3, array, on, op);
+        on1 = on.v.buffer;
+        op1 = op.v.buffer;
+
+        // ToDo: use PyArray_SIZE
+        if (array_data.length !== on1.length && array_data.length !== op1.length) {
+            throw new Sk.builtin.ValueError("size is not compatible with inputs");
+        }
+        // this loop assumes the same shape and array order
+        for (i = 0; i < array_data.length; i++) {
+            on_data = Sk.ffi.remapToJs(on1[i]);
+            op_data = Sk.ffi.remapToJs(op1[i]);
+            array_data[i] = new Sk.builtin.int_(func(state, on_data, op_data));
+        }
+    }
+
+    return array;
 }
 
 function PyArray_FROM_OTF(m, type, flags) {
@@ -953,7 +1035,7 @@ var $builtinmodule = function(name) {
             if (size == null) {
                 size = Sk.builtin.none.none$;
             }
-
+            debugger;
             var ex = null;
             try {
                 fp = Sk.ffi.remapToJs(new Sk.builtin.float_(p));
@@ -980,16 +1062,18 @@ var $builtinmodule = function(name) {
             // we may have to deal with arrays
             on = PyArray_FROM_OTF(n, Sk.builtin.int_);
             op = PyArray_FROM_OTF(p, Sk.builtin.float_);
-
-            if (Sk.misceval.callsim(np.$d.any, Sk.misceval.callsim(np.$d.less, n, new Sk.builtin_int(0))) == sk.builtin.bool.true$) {
+            var py_zero = new Sk.builtin.int_(0);
+            if (Sk.misceval.callsim(np.$d.any, Sk.misceval.callsim(np.$d.less, n, py_zero)) == Sk.builtin.bool.true$) {
                 throw new Sk.builtin.ValueError("n < 0");
             }
-            if (Sk.misceval.callsim(np.$d.any, Sk.misceval.callsim(np.$d.less, p, new Sk.builtin_int(0))) == sk.builtin.bool.true$) {
+            if (Sk.misceval.callsim(np.$d.any, Sk.misceval.callsim(np.$d.less, p, py_zero)) == Sk.builtin.bool.true$) {
                 throw new Sk.builtin.ValueError("p < 0");
             }
-            if (Sk.misceval.callsim(np.$d.any, Sk.misceval.callsim(np.$d.greater, p, new Sk.builtin_int(1))) == sk.builtin.bool.true$) {
+            if (Sk.misceval.callsim(np.$d.any, Sk.misceval.callsim(np.$d.greater, p, new Sk.builtin.int_(1))) == Sk.builtin.bool.true$) {
                 throw new Sk.builtin.ValueError("p > 1");
             }
+
+            // ToDo: we need to broadcast the array
             return discnp_array(self.internal_state, rk_binomial, size, on, op, self.lock);
         };
         $loc.binomial = new Sk.builtin.func(js_binomial);

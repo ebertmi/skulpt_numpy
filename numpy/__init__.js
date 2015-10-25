@@ -454,6 +454,10 @@ var $builtinmodule = function (name) {
         return arr.v.dtype;
     }
 
+    function PyArray_MultiIterNew() {
+        throw new Sk.builtin.NotImplementedError("MultiIter is not supported");
+    }
+
     /* Does nothing with descr (cannot be NULL) */
     /*NUMPY_API
       Get scalar-equivalent to a region of memory described by a descriptor.
@@ -901,14 +905,18 @@ var $builtinmodule = function (name) {
         } else if (Sk.builtin.checkSequence(obj)) {
             // sequence
             element = seqUnpacker(obj, maxdims);
-        } else if (Sk.abstr.typeName(obj) === CLASS_NDARRAY) {
+            if (PyArray_Check(element)) {
+                return PyArray_DESCR(obj);
+            }
+        } else if (PyArray_Check(obj)) {
             // array
+            var descr = PyArray_DESCR(obj);
+            if (descr != null) {
+                return descr;
+            }
             var length = Sk.builtin.len(obj);
             if (Sk.builtin.asnum$(length) > 0) {
                 element = PyArray_DATA(obj)[0];
-            } else {
-                // get dtype from ndarray
-                return obj.v.dtype;
             }
         }
 
@@ -1690,9 +1698,15 @@ var $builtinmodule = function (name) {
   }
 
   /**
-        Unpacks in any form fo nested Lists
-    **/
+        Unpacks in any form fo nested Lists,
+        We need to support sequences and ndarrays here!
+   **/
   function unpack(py_obj, buffer, state) {
+    if (PyArray_Check(py_obj)) {
+        // unpack array, easiest but slow version is to convert the array to a list
+        py_obj = Sk.misceval.callsim(py_obj.tolist, py_obj);
+    }
+
     if (py_obj instanceof Sk.builtin.list || py_obj instanceof Sk.builtin.tuple) {
       var py_items = remapToJs_shallow(py_obj);
       state.level += 1;

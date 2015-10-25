@@ -3268,6 +3268,40 @@ var $builtinmodule = function (name) {
   ];
   mod.not_equal = new Sk.builtin.func(not_equal_f);
 
+  mod.identity = new Sk.builtin.func(function (n, dtype) {
+    Sk.builtin.pyCheckArgs("identity", arguments, 1, 2, false);
+    //if (dtype == null) {
+    //   dtype = Sk.builtin.none.none$;
+    //}
+
+    n = new Sk.builtin.int_(n); // convert to int or truncate
+
+    var a;
+    var b;
+    // [1]+n*[0]
+    //var al = Sk.abstr.numberBinOp(new Sk.builtin.list([1]), Sk.abstr.numberBinOp(n, new Sk.builtin.list([0]), 'Mult'), 'Add');
+    
+    // we cannot use flat iter, just generate n*n array and fill with zeros,
+    //a = Sk.misceval.callsim(mod.array, al, dtype);
+    b = Sk.misceval.callsim(mod.zeros, new Sk.builtin.tuple([n, n]), dtype);
+    // b.flat = a;
+    // just iterate over n*n array and increment i and j, usefo
+    var i;
+    var j;
+    var length = Sk.ffi.remapToJs(n);
+    var value = PyArray_DESCR(b)(1);
+    for (i = 0, j = 0; i < length; i++, j++) {
+        PyArray_DATA(b)[computeOffset(PyArray_STRIDES(b), [i, j])] = value;
+    }
+
+    return b;
+  });
+
+  mod.eye = new Sk.builtin.func(function (N, M, k, dtype) {
+    throw new Sk.builtin.NotImplementedError(
+      "eye is not yet implemented");
+  });
+
   /* not implemented methods */
   mod.ones_like = new Sk.builtin.func(function () {
     throw new Sk.builtin.NotImplementedError(

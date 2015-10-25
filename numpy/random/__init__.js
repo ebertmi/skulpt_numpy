@@ -389,7 +389,7 @@ function rk_binomial_btpe(state, n, p) {
     var a, u, v, s, F, rho, t, A, nrq, x1, x2, f1, f2, z, z2, w, w2, x;
     var m, y, k, i;
 
-    if (!(state.binomial) || (state.nsave != n) || (state.psave != p)) {
+    if (!(state.has_binomial === 1) || (state.nsave != n) || (state.psave != p)) {
         // initialize
         state.nsave = n;
         state.psave = p;
@@ -433,13 +433,13 @@ function rk_binomial_btpe(state, n, p) {
         switch (goto_label) {
         case 'Step10':
             nrq = n * r * q;
-            goto_label = 'foo';
             u = rk_double(state) * p4;
             v = rk_double(state);
             if (u > p1) {
                 goto_label = 'Step20';
                 continue goto_loop;
             }
+            y = Math.floor(xm - p1 * v + u);
             goto_label = 'Step60';
             continue goto_loop;
         case 'Step20':
@@ -523,7 +523,7 @@ function rk_binomial_btpe(state, n, p) {
             f2 = f1 * f1;
             z2 = z * z;
             w2 = w * w;
-            if (A > (xm * log(f1 / x1)
+            if (A > (xm * Math.log(f1 / x1)
                    + (n - m + 0.5) * Math.log(z / w)
                    + (y - m) * Math.log(w * r / (x1 * q))
                    + (13680.0 - (462.0 - (132.0 - (99.0 - 140.0 / f2) / f2) / f2) / f2) / f1 / 166320.0
@@ -558,14 +558,14 @@ function rk_binomial_inversion(state, n, p) {
     var X;
     var bound;
 
-    if (!(state.has_binomial) ||
+    if (!(state.has_binomial === 1) ||
          (state.nsave != n) ||
          (state.psave != p)) {
         state.save = n;
         state.psave = p;
         state.has_binomial = 1;
         state.q = q = 1.0 - p;
-        state.r = qn = exp(n * log(q));
+        state.r = qn = Math.exp(n * Math.log(q));
         state.c = np = n * p;
         state.m = bound = Math.min(n, np + 10.0 * Math.sqrt(np * q + 1));
     } else {
@@ -598,14 +598,14 @@ function rk_binomial(state, n, p) {
 
     if (p <= 0.5) {
         if (p * n >= 30.0) {
-            return rk_binomial_inverion(state, n, p);
+            return rk_binomial_inversion(state, n, p);
         } else {
             return rk_binomial_btpe(state, n, p);
         }
     } else {
         q = 1.0 - p;
-        if (q * n >= 30.0) {
-            return n - rk_binomial_inverions(state, n, q);
+        if (q * n <= 30.0) {
+            return n - rk_binomial_inversion(state, n, q);
         } else {
             return n - rk_binomial_btpe(state, n, q);
         }

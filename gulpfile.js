@@ -14,7 +14,7 @@ gulp.task('default', ['clean', 'minify']);
 gulp.task('minify', function () {
     files.forEach(function(f) {
         gulp.src(f, {base: './'})
-            .pipe(uglify())
+            .pipe(uglify({mangle: false}))
             .pipe(gulp.dest('./dist/'))
             .pipe(notify({ message: 'Finished minifying JavaScript'}));
     });

@@ -237,12 +237,7 @@ var $builtinmodule = function (name) {
     var NPY_ARRAY_UPDATEIFCOPY = 0x1000;
 
     var numpy = function () {
-      if (typeof mathjs == 'function') {
-        // load mathjs instance
-        this.math = mathjs();
-      } else {
-        Sk.debugout('mathjs not included and callable');
-      }
+        this.math = Math; // set math object
     };
 
     numpy.prototype.arange = function (start, stop, step) {
@@ -2490,7 +2485,7 @@ var $builtinmodule = function (name) {
   // Hyperbolic sine, element-wise.
   var sinh_f = function (x, out) {
     Sk.builtin.pyCheckArgs("sinh", arguments, 1, 2);
-    if (!np.math) throw new Sk.builtin.OperationError("sinh requires mathjs");
+    if (!np.math) throw new Sk.builtin.OperationError("sinh requires math polyfill");
     return callTrigonometricFunc(x, np.math.sinh);
   };
   sinh_f.co_varnames = ['x', 'out'];
@@ -2518,7 +2513,7 @@ var $builtinmodule = function (name) {
   // Hyperbolic cosine, element-wise.
   var cosh_f = function (x, out) {
     Sk.builtin.pyCheckArgs("cosh", arguments, 1, 2);
-    if (!np.math) throw new Sk.builtin.OperationError("cosh requires mathjs");
+    if (!np.math) throw new Sk.builtin.OperationError("cosh requires math polyfill");
     return callTrigonometricFunc(x, np.math.cosh);
   };
   cosh_f.co_varnames = ['x', 'out'];
@@ -2555,7 +2550,7 @@ var $builtinmodule = function (name) {
   // Hyperbolic cosine, element-wise.
   var tanh_f = function (x, out) {
     Sk.builtin.pyCheckArgs("tanh", arguments, 1, 2);
-    if (!np.math) throw new Sk.builtin.OperationError("tanh requires mathjs");
+    if (!np.math) throw new Sk.builtin.OperationError("tanh requires math polyfill");
     return callTrigonometricFunc(x, np.math.tanh);
   };
   tanh_f.co_varnames = ['x', 'out'];

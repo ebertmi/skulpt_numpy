@@ -733,14 +733,14 @@ var $builtinmodule = function (name) {
             PyArray_STRIDES(ret)[i] = PyArray_STRIDES(ap)[permutation[i]];
         }
 
-        //var list = tolist(ndarrayJs.buffer, ndarrayJs.shape, ndarrayJs.strides, ndarrayJs.dtype);
-        var newBuffer = tobufferrecursive(PyArray_DATA(ap), PyArray_DIMS(ret), PyArray_STRIDES(ret), 0, PyArray_DESCR(ret));
-        ret.v.buffer = newBuffer;
+        var list = tolist(PyArray_DATA(ap), PyArray_DIMS(ret), PyArray_STRIDES(ret), 0, PyArray_DESCR(ret));
+        //var newBuffer = tobufferrecursive(PyArray_DATA(ap), PyArray_DIMS(ret), PyArray_STRIDES(ret), 0, PyArray_DESCR(ret));
+        //ret.v.buffer = newBuffer;
         // can we skip this call and just use the internal tolist?
-        //var newArray = Sk.misceval.callsim(mod.array, list);
+        var newArray = Sk.misceval.callsim(mod.array, list);
         //     PyArray_UpdateFlags(ret, NPY_ARRAY_C_CONTIGUOUS | NPY_ARRAY_F_CONTIGUOUS |NPY_ARRAY_ALIGNED);
 
-        return ret;
+        return newArray;
     }
 
     // OBJECT_dot is the method used for python types

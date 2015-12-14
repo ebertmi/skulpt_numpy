@@ -739,8 +739,8 @@ var $builtinmodule = function (name) {
         // can we skip this call and just use the internal tolist?
         var newArray = Sk.misceval.callsim(mod.array, list);
         //     PyArray_UpdateFlags(ret, NPY_ARRAY_C_CONTIGUOUS | NPY_ARRAY_F_CONTIGUOUS |NPY_ARRAY_ALIGNED);
-
         return newArray;
+        //return ret;
     }
 
     // OBJECT_dot is the method used for python types
@@ -1864,7 +1864,7 @@ var $builtinmodule = function (name) {
             }
 
             switch (_name) {
-            case 'ndmin':
+            case 'ndim':
                 return new Sk.builtin.int_(PyArray_NDIM(self));
             case 'dtype':
                 return self.v.dtype;
@@ -1891,8 +1891,20 @@ var $builtinmodule = function (name) {
             }
         }
 
+        var r, f, ret;
         // if we have not returned yet, try the genericgetattr
-        return Sk.misceval.callsim(self.__getattribute__, self, name);
+        if (self.tp$getattr !== undefined) {
+            f = self.tp$getattr("__getattribute__");
+        }
+
+        if (f !== undefined) {
+            ret = Sk.misceval.callsimOrSuspend(f, new Sk.builtin.str(_name));
+        }
+
+        if (r === undefined) {
+            throw new Sk.builtin.AttributeError("'" + Sk.abstr.typeName(self) + "' object has no attribute '" + _name + "'");
+        }
+        return r;
     });
 
     // ndmin cannot be set, etc...
@@ -2427,6 +2439,10 @@ var $builtinmodule = function (name) {
         return Sk.misceval.callsim(mod.all, self, axis, out);
     });
 
+    $loc.mean = new Sk.builtin.func(function (self, axis, dtype, out, keepdims) {
+        return Sk.misceval.callsim(mod.mean, self, axis, dtype, out, keepdims);
+    });
+
     // end of ndarray_f
   };
 
@@ -2885,7 +2901,7 @@ var $builtinmodule = function (name) {
   mod.absolute = mod.abs;
 
  var mean_f = function (x, axis, dtype, out, keepdims) {
-    Sk.builtin.pyCheckArgs("mean", arguments, 1, 1);
+    Sk.builtin.pyCheckArgs("mean", arguments, 1, 5);
     var ret;
     var sum = new Sk.builtin.float_(0.0); // initialised sum var
     var mean;
@@ -2893,23 +2909,24 @@ var $builtinmodule = function (name) {
     var _buffer;
     var length;
 
-    if (axis != null || !Sk.builtin.checkNone(axis)) {
+    if (axis != null && !Sk.builtin.checkNone(axis)) {
         throw new Sk.builtin.NotImplementedError("the 'axis' parameter is currently not supported");
     }
 
-    if (out != null || !Sk.builtin.checkNone(out)) {
+    if (out != null && !Sk.builtin.checkNone(out)) {
         throw new Sk.builtin.NotImplementedError("the 'out' parameter is currently not supported");
     }
 
-    if (keepdims != null || keepdims != Sk.builtin.bool.false$) {
+    if (keepdims != null && keepdims != Sk.builtin.bool.false$) {
         throw new Sk.builtin.NotImplementedError("the 'keepdims' parameter is currently not supported");
     }
 
     // ToDo: check here for array like
     // call PyArrayFromAny
+
     if (PyArray_Check(x) == true) {
         _buffer = PyArray_DATA(x);
-        length = Sk.builtin.len(x);
+        length = new Sk.builtin.int_(PyArray_SIZE(x));
 
         for (i = 0; i < length.v; i++) {
             sum = Sk.abstr.numberBinOp(sum, _buffer[i], 'Add');

@@ -1962,7 +1962,7 @@ var $builtinmodule = function (name) {
       var buffer = PyArray_DATA(self).map(function (x) {
         return x;
       });
-      var shape = new Sk.builtin.tuplePy(PyArray_DIMS(self).map(function (x) {
+      var shape = new Sk.builtin.tuple(PyArray_DIMS(self).map(function (x) {
         return new Sk.builtin.int_(x);
       }));
       return Sk.misceval.callsim(mod[CLASS_NDARRAY], shape, PyArray_DESCR(self),
@@ -2111,7 +2111,7 @@ var $builtinmodule = function (name) {
       } else if (index instanceof Sk.builtin.tuple) {
         // index like [1,3]
         var keyJs = Sk.ffi.remapToJs(index);
-        if (index.length != PyArray_DIMS(self).length) {
+        if (keyJs.length != PyArray_NDIM(self)) {
             throw new Sk.builtin.ValueError('Tuple must contain values for all dimensions');
         }
         // ToDo: implement buffer returning for smaller bits
@@ -2153,7 +2153,7 @@ var $builtinmodule = function (name) {
           var _ubound = (_offset + 1) * _stride;
           var i;
           for (i = _offset * _stride; i < _ubound; i++) {
-            ndarrayJs.buffer[i] = _value.buffer[_index++];
+            ndarrayJs.buffer[i] = _value[_index++];
           }
         } else {
           if (_offset >= 0 && _offset < ndarrayJs.buffer.length) {
@@ -2441,6 +2441,14 @@ var $builtinmodule = function (name) {
 
     $loc.mean = new Sk.builtin.func(function (self, axis, dtype, out, keepdims) {
         return Sk.misceval.callsim(mod.mean, self, axis, dtype, out, keepdims);
+    });
+
+    $loc.sum = new Sk.builtin.func(function (self, axis, dtype, out, keepdims) {
+        return Sk.misceval.callsim(mod.sum, self, axis, dtype, out, keepdims);
+    });
+
+    $loc.prod = new Sk.builtin.func(function (self, axis, dtype, out, keepdims) {
+        return Sk.misceval.callsim(mod.prod, self, axis, dtype, out, keepdims);
     });
 
     // end of ndarray_f
@@ -2949,6 +2957,101 @@ var $builtinmodule = function (name) {
   mean_f.co_varnames = ['a', 'axis', 'dtype', 'out', 'keepdims'];
   mean_f.$defaults = [null, Sk.builtin.none.none$, Sk.builtin.none.none$, Sk.builtin.none.none$, Sk.builtin.bool.false$];
   mod.mean = new Sk.builtin.func(mean_f);
+
+ var sum_f = function (x, axis, dtype, out, keepdims) {
+    Sk.builtin.pyCheckArgs("sum", arguments, 1, 5);
+    var ret;
+    var sum = new Sk.builtin.float_(0.0); // initialised sum var
+    var i = 0;
+    var _buffer;
+    var length;
+
+    if (axis != null && !Sk.builtin.checkNone(axis)) {
+        throw new Sk.builtin.NotImplementedError("the 'axis' parameter is currently not supported");
+    }
+
+    if (out != null && !Sk.builtin.checkNone(out)) {
+        throw new Sk.builtin.NotImplementedError("the 'out' parameter is currently not supported");
+    }
+
+    if (keepdims != null && keepdims != Sk.builtin.bool.false$) {
+        throw new Sk.builtin.NotImplementedError("the 'keepdims' parameter is currently not supported");
+    }
+
+    // ToDo: check here for array like
+    // call PyArrayFromAny
+
+    if (PyArray_Check(x) == true) {
+        _buffer = PyArray_DATA(x);
+        length = new Sk.builtin.int_(PyArray_SIZE(x));
+
+        for (i = 0; i < length.v; i++) {
+            sum = Sk.abstr.numberBinOp(sum, _buffer[i], 'Add');
+        }
+    } else {
+        // return abs for element by calling abs
+        sum = x
+    }
+
+    // apply dtype casting
+    if (dtype != null && !Sk.builtin.checkNone(dtype)) {
+        sum = Sk.misceval.callsim(dtype, sum);
+    }
+
+    // call PyArray_Return
+    return sum;
+  };
+  sum_f.co_varnames = ['a', 'axis', 'dtype', 'out', 'keepdims'];
+  sum_f.$defaults = [null, Sk.builtin.none.none$, Sk.builtin.none.none$, Sk.builtin.none.none$, Sk.builtin.bool.false$];
+  mod.sum = new Sk.builtin.func(sum_f);
+
+ var prod_f = function (x, axis, dtype, out, keepdims) {
+    Sk.builtin.pyCheckArgs("prod", arguments, 1, 5);
+    var ret;
+    var prod = new Sk.builtin.float_(1.0); // initialised sum var
+    var i = 0;
+    var _buffer;
+    var length;
+
+    if (axis != null && !Sk.builtin.checkNone(axis)) {
+        throw new Sk.builtin.NotImplementedError("the 'axis' parameter is currently not supported");
+    }
+
+    if (out != null && !Sk.builtin.checkNone(out)) {
+        throw new Sk.builtin.NotImplementedError("the 'out' parameter is currently not supported");
+    }
+
+    if (keepdims != null && keepdims != Sk.builtin.bool.false$) {
+        throw new Sk.builtin.NotImplementedError("the 'keepdims' parameter is currently not supported");
+    }
+
+    // ToDo: check here for array like
+    // call PyArrayFromAny
+
+    if (PyArray_Check(x) == true) {
+        _buffer = PyArray_DATA(x);
+        length = new Sk.builtin.int_(PyArray_SIZE(x));
+
+        for (i = 0; i < length.v; i++) {
+            prod = Sk.abstr.numberBinOp(prod, _buffer[i], 'Mult');
+        }
+    } else {
+        // return abs for element by calling abs
+        prod = x
+    }
+
+    // apply dtype casting
+    if (dtype != null && !Sk.builtin.checkNone(dtype)) {
+        prod = Sk.misceval.callsim(dtype, prod);
+    }
+
+    // call PyArray_Return
+    return prod;
+  };
+  prod_f.co_varnames = ['a', 'axis', 'dtype', 'out', 'keepdims'];
+  prod_f.$defaults = [null, Sk.builtin.none.none$, Sk.builtin.none.none$, Sk.builtin.none.none$, Sk.builtin.bool.false$];
+  mod.prod = new Sk.builtin.func(prod_f);
+
 
   /**
     Return a new array of given shape and type, filled with ones.
